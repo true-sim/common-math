@@ -65,6 +65,8 @@ identical with or without it.
 
 - Disable with `-Dtruesim.math.inline=false`.
 - On JVMs without HotSpot's diagnostic commands it is skipped (some operations then allocate).
+- Format conversions of `ElementBuffer` views are never inlined either: they return doubles, and
+  keeping them out leaves the JIT room to remove the values around them.
 - The directive matches all methods, so it takes precedence over compiler directives added before it.
 - HotSpot applies only the newest directive, so other libraries register their own patterns with
   `JitInlining.include("+com/example/Query.run")` instead of adding a directive; the library then
@@ -212,6 +214,43 @@ Perlin and simplex noise in 2D and 3D plus fractal sums of octaves.
 `Integrator.SEMI_IMPLICIT_EULER`, `VELOCITY_VERLET` and `RK4` advance a `Motion` under any
 `Acceleration`; `Polynomials` solves quadratic and cubic equations (numerically stable);
 `RootFinding` offers bisection and Newton's method.
+
+## Interleaved data: vertices and particles
+
+`ElementLayout` describes one element with several attributes (offsets and stride follow each
+format's natural alignment). `ElementBuffer` puts elements in any `MemorySegment`: off-heap from an
+`Arena`, on the heap, or wrapped around a mapped file or a buffer shared with native code or the GPU.
+Typed views read and write one attribute across all elements without allocating.
+
+```java
+ElementLayout vertex = ElementLayout.builder()
+    .attribute("position", Format.FLOAT3)
+    .attribute("normal", Format.OCT16)     // unit vector in 4 bytes
+    .attribute("uv", Format.HALF2)
+    .attribute("color", Format.SRGB8_4)    // same bytes as Color.writeRgba8
+    .build();                              // 24 bytes per vertex; memoryLayout() for FFM
+
+ElementBuffer vertices = ElementBuffer.allocate(arena, vertex, count);
+Vec3Attribute position = vertices.vec3("position");
+Vec3Attribute normal = vertices.vec3("normal");
+position.set(i, p);
+position.transformPoints(model);
+normal.transformDirections(model);
+```
+
+| Format | Storage |
+|---|---|
+| `DOUBLE1`-`DOUBLE4`, `FLOAT1`-`FLOAT4`, `HALF2`, `HALF4` | 64, 32 and 16-bit floats |
+| `UNORM8_4`, `UNORM16_2`, `UNORM16_4` | unsigned normalized integers, [0, 1] |
+| `SNORM8_4`, `SNORM16_2`, `SNORM16_4` | signed normalized integers, [-1, 1] |
+| `SRGB8_4` | color bytes, RGB sRGB-encoded, alpha linear |
+| `OCT16` | unit vector, octahedral encoding in two `SNORM16` |
+| `INT1` | 32-bit integer (ids, flags) |
+
+Views: `scalar`, `ints`, `vec2`, `vec3`, `vec4`, `quat`, `color`; each accepts the formats that can
+hold its type (a `Vec3` fits `FLOAT3`, `OCT16`, or a padded four-component format). For a
+structure-of-arrays particle system, use one buffer per attribute with `ElementLayout.of(name,
+format)`: the views work the same. Conversions round to nearest and clamp, deterministically.
 
 ## Building
 
