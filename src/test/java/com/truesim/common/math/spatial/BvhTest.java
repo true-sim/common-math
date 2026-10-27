@@ -14,7 +14,9 @@ import com.truesim.common.math.geometry.Ray;
 import com.truesim.common.math.geometry.Sphere;
 import com.truesim.common.math.random.Rng;
 import java.lang.foreign.Arena;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -83,6 +85,37 @@ class BvhTest {
             }
             assertThat(collect(v -> bvh.queryFrustum(frustum, v))).isEqualTo(visible);
         }
+    }
+
+    @Test
+    void frustumQueriesStopAnywhereKeepingTheirOrder() {
+        Rng rng = Rng.seeded(77);
+        AabbArray boxes = randomBoxes(rng, 3_000);
+        for (int leafSize : new int[] {1, 4}) {
+            Bvh bvh = Bvh.build(Arena.ofAuto(), boxes, leafSize);
+            // One frustum seeing part of the boxes (straddled leaves), one seeing all (whole subtrees untested).
+            Frustum part = Frustum.fromMatrix(Mat4.perspective(0.8, 1.2, 1, 60)
+                .mul(Mat4.lookAt(Vec3.of(0, 0, 80), Vec3.ZERO, Vec3.UP)));
+            Frustum all = Frustum.fromMatrix(Mat4.perspective(2.5, 1, 1, 10_000)
+                .mul(Mat4.lookAt(Vec3.of(0, 0, 2_000), Vec3.ZERO, Vec3.UP)));
+            for (Frustum frustum : new Frustum[] {part, all}) {
+                List<Integer> everything = new ArrayList<>();
+                int total = bvh.queryFrustum(frustum, p -> everything.add(p));
+                assertThat(total).isEqualTo(everything.size()).isPositive();
+                for (int stopAfter = 1; stopAfter <= Math.min(total, 40); stopAfter++) {
+                    List<Integer> prefix = new ArrayList<>();
+                    int limit = stopAfter;
+                    int visited = bvh.queryFrustum(frustum, p -> {
+                        prefix.add(p);
+                        return prefix.size() < limit;
+                    });
+                    assertThat(visited).isEqualTo(stopAfter);
+                    assertThat(prefix).isEqualTo(everything.subList(0, stopAfter));
+                }
+            }
+            assertThat(bvh.queryFrustum(all, p -> true)).isEqualTo(3_000);
+        }
+        assertThat(Bvh.build(AabbArray.onHeap(0)).queryFrustum(Frustum.fromMatrix(Mat4.IDENTITY), p -> true)).isZero();
     }
 
     @Test

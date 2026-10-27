@@ -339,42 +339,113 @@ public final class Bvh {
 
     /** Visits every primitive whose box may be visible in the frustum; returns how many were visited. */
     public int queryFrustum(Frustum frustum, Visitor visitor) {
-        int visited = 0;
-        int node = 0;
-        while (node < nodeCount) {
-            long o = (long) node * NODE_BYTES;
-            if (inFrustum(frustum, nodes, o)) {
-                int count = nodes.get(INT, o + COUNT);
-                int first = nodes.get(INT, o + FIRST);
-                for (int k = first; k < first + count; k++) {
-                    int p = primitive(k);
-                    if (inFrustum(frustum, bounds.segment(), bounds.stride() * p)) {
-                        visited++;
-                        if (!visitor.visit(p)) {
-                            return visited;
-                        }
+        if (nodeCount == 0) {
+            return 0;
+        }
+        int result = frustumNode(frustum, visitor, 0, ALL_PLANES, 0);
+        return result < 0 ? ~result : result;
+    }
+
+    private static final int ALL_PLANES = 0b111111;
+
+    /**
+     * Visits the primitives under {@code node} that are in the frustum, testing only the planes in {@code planes}: the
+     * ones the parent's box straddles. A box entirely in front of a plane takes it off the mask for everything below
+     * it, and a box entirely inside reports its whole subtree untested; both only skip tests that would pass, so the
+     * results and their order are those of testing every box against every plane. Returns the visited count, or its
+     * complement ({@code ~visited}, negative) when the visitor stopped the query. Recursion depth is the tree depth.
+     */
+    private int frustumNode(Frustum frustum, Visitor visitor, int node, int planes, int visited) {
+        long o = (long) node * NODE_BYTES;
+        int straddled = classify(frustum, nodes, o, planes);
+        if (straddled < 0) {
+            return visited;
+        }
+        int count = nodes.get(INT, o + COUNT);
+        if (count > 0) {
+            int first = nodes.get(INT, o + FIRST);
+            for (int k = first; k < first + count; k++) {
+                int p = primitive(k);
+                if (straddled == 0 || classify(frustum, bounds.segment(), bounds.stride() * p, straddled) >= 0) {
+                    visited++;
+                    if (!visitor.visit(p)) {
+                        return ~visited;
                     }
                 }
-                node++;
-            } else {
-                node = nodes.get(INT, o + SKIP);
+            }
+            return visited;
+        }
+        if (straddled == 0) {
+            return reportSubtree(visitor, node, visited);
+        }
+        int left = node + 1;
+        int result = frustumNode(frustum, visitor, left, straddled, visited);
+        if (result < 0) {
+            return result;
+        }
+        return frustumNode(frustum, visitor, nodes.get(INT, (long) left * NODE_BYTES + SKIP), straddled, result);
+    }
+
+    /** Visits every primitive under {@code node}, which lies entirely inside the frustum, in tree order. */
+    private int reportSubtree(Visitor visitor, int node, int visited) {
+        int end = nodes.get(INT, (long) node * NODE_BYTES + SKIP);
+        for (int n = node; n < end; n++) {
+            long o = (long) n * NODE_BYTES;
+            int count = nodes.get(INT, o + COUNT);
+            int first = nodes.get(INT, o + FIRST);
+            for (int k = first; k < first + count; k++) {
+                visited++;
+                if (!visitor.visit(primitive(k))) {
+                    return ~visited;
+                }
             }
         }
         return visited;
     }
 
-    private static boolean inFrustum(Frustum frustum, MemorySegment memory, long offset) {
-        return inFront(frustum.left(), memory, offset) && inFront(frustum.right(), memory, offset)
-            && inFront(frustum.bottom(), memory, offset) && inFront(frustum.top(), memory, offset)
-            && inFront(frustum.near(), memory, offset) && inFront(frustum.far(), memory, offset);
-    }
-
-    private static boolean inFront(Plane plane, MemorySegment memory, long offset) {
-        Vec3 n = plane.normal();
-        return Intersections.aabbPlane(
-            memory.get(DOUBLE, offset), memory.get(DOUBLE, offset + 8), memory.get(DOUBLE, offset + 16),
-            memory.get(DOUBLE, offset + 24), memory.get(DOUBLE, offset + 32), memory.get(DOUBLE, offset + 40),
-            n.x(), n.y(), n.z(), plane.distance());
+    /**
+     * Tests the box at {@code offset} against the planes in {@code planes}: -1 if it is entirely behind one of them,
+     * else the planes it is not entirely in front of (0: inside them all).
+     */
+    private static int classify(Frustum frustum, MemorySegment memory, long offset, int planes) {
+        double minX = memory.get(DOUBLE, offset);
+        double minY = memory.get(DOUBLE, offset + 8);
+        double minZ = memory.get(DOUBLE, offset + 16);
+        double maxX = memory.get(DOUBLE, offset + 24);
+        double maxY = memory.get(DOUBLE, offset + 32);
+        double maxZ = memory.get(DOUBLE, offset + 40);
+        int straddled = planes;
+        for (int i = 0; i < 6; i++) {
+            int bit = 1 << i;
+            if ((planes & bit) == 0) {
+                continue;
+            }
+            Plane plane = switch (i) {
+                case 0 -> frustum.left();
+                case 1 -> frustum.right();
+                case 2 -> frustum.bottom();
+                case 3 -> frustum.top();
+                case 4 -> frustum.near();
+                default -> frustum.far();
+            };
+            Vec3 n = plane.normal();
+            double nx = n.x();
+            double ny = n.y();
+            double nz = n.z();
+            // The corner furthest along the normal decides whether the box is behind (as Intersections.aabbPlane),
+            // the nearest corner whether it is entirely in front.
+            double far = nx * (nx >= 0 ? maxX : minX) + ny * (ny >= 0 ? maxY : minY) + nz * (nz >= 0 ? maxZ : minZ)
+                - plane.distance();
+            if (far < 0) {
+                return -1;
+            }
+            double near = nx * (nx >= 0 ? minX : maxX) + ny * (ny >= 0 ? minY : maxY) + nz * (nz >= 0 ? minZ : maxZ)
+                - plane.distance();
+            if (near >= 0) {
+                straddled &= ~bit;
+            }
+        }
+        return straddled;
     }
 
     private int primitive(int k) {
