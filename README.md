@@ -66,6 +66,9 @@ identical with or without it.
 - Disable with `-Dtruesim.math.inline=false`.
 - On JVMs without HotSpot's diagnostic commands it is skipped (some operations then allocate).
 - The directive matches all methods, so it takes precedence over compiler directives added before it.
+- HotSpot applies only the newest directive, so other libraries register their own patterns with
+  `JitInlining.include("+com/example/Query.run")` instead of adding a directive; the library then
+  installs one directive that combines both.
 
 Allocation is verified by tests (`AllocationFreeTest`), which measure real heap allocation after
 the JIT has compiled the code.
