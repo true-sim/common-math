@@ -20,7 +20,8 @@ import javax.management.ObjectName;
  * that always inlines the methods of its value types and the methods of its array types that create values. Methods
  * that only read and write memory are left to the JIT's normal heuristics: forcing those inline produces compilation
  * units too large for the JIT. The transcendental functions behind {@link Maths} are never inlined: they return plain
- * doubles, and inlining them would use up the JIT's per-method budget before the value code. Results are identical
+ * doubles, and inlining them would use up the JIT's per-method budget before the value code. Neither are the format
+ * conversions of {@link com.truesim.common.math.layout.ElementBuffer}, for the same reason. Results are identical
  * either way; only allocation changes.
  *
  * <p>Disable with {@code -Dtruesim.math.inline=false}. On JVMs without HotSpot's diagnostic commands the directive is
@@ -39,7 +40,7 @@ public final class JitInlining {
 
     // Inline patterns as in a compiler directive: + to always inline, - to never inline.
     private static final List<String> PATTERNS = List.of(
-        "-com/truesim/common/math/Fdlibm.*",
+        "-com/truesim/common/math/Fdlibm.*", "-com/truesim/common/math/layout/Format.*",
         "+com/truesim/common/math/Vec2.*", "+com/truesim/common/math/Vec3.*", "+com/truesim/common/math/Vec4.*",
         "+com/truesim/common/math/Quat.*", "+com/truesim/common/math/Mat3.*", "+com/truesim/common/math/Mat4.*",
         "+com/truesim/common/math/Scalar.*", "+com/truesim/common/math/color/Color.*",
@@ -60,7 +61,8 @@ public final class JitInlining {
         "+com/truesim/common/math/QuatArray.get", "+com/truesim/common/math/QuatArray.set",
         "+com/truesim/common/math/Mat3Array.get", "+com/truesim/common/math/Mat3Array.set",
         "+com/truesim/common/math/Mat4Array.set",
-        "+com/truesim/common/math/color/ColorArray.get", "+com/truesim/common/math/color/ColorArray.set");
+        "+com/truesim/common/math/color/ColorArray.get", "+com/truesim/common/math/color/ColorArray.set",
+        "+com/truesim/common/math/layout/*.get", "+com/truesim/common/math/layout/*.set");
 
     private static final Pattern VALID = Pattern.compile("[+-][A-Za-z0-9_$/.*]+");
 

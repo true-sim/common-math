@@ -6,6 +6,12 @@ import com.truesim.common.math.color.Color;
 import com.truesim.common.math.color.ColorArray;
 import com.truesim.common.math.color.ColorSpace;
 import com.truesim.common.math.interpolation.Easing;
+import com.truesim.common.math.layout.ColorAttribute;
+import com.truesim.common.math.layout.ElementBuffer;
+import com.truesim.common.math.layout.ElementLayout;
+import com.truesim.common.math.layout.Format;
+import com.truesim.common.math.layout.Vec2Attribute;
+import com.truesim.common.math.layout.Vec3Attribute;
 import java.lang.foreign.Arena;
 import org.junit.jupiter.api.Test;
 
@@ -174,5 +180,43 @@ class AllocationFreeTest {
                 colors.set(i, colors.get(i).mix(Color.WHITE, t, ColorSpace.OKLAB));
             }
         }, 1_000, 500, 20);
+    }
+
+    @Test
+    void elementBuffers() {
+        ElementBuffer vertices =
+            ElementBuffer.onHeap(ElementLayout.builder()
+                .attribute("position", Format.FLOAT3)
+                .attribute("normal", Format.OCT16)
+                .attribute("uv", Format.HALF2)
+                .attribute("color", Format.SRGB8_4)
+                .build(), 64);
+        Vec3Attribute position = vertices.vec3("position");
+        Vec3Attribute normal = vertices.vec3("normal");
+        int[] i = {0};
+        assertAllocationFree(() -> {
+            int k = i[0] = (i[0] + 1) & 63;
+            Vec3 p = position.get(k).add(normal.get(k).scale(0.01));
+            position.set(k, p);
+            normal.set(k, p.cross(Vec3.UP));
+        });
+    }
+
+    @Test
+    void elementBufferColors() {
+        ElementBuffer vertices = ElementBuffer.onHeap(ElementLayout.builder()
+            .attribute("uv", Format.HALF2)
+            .attribute("color", Format.SRGB8_4)
+            .build(), 64);
+        Vec2Attribute uv = vertices.vec2("uv");
+        ColorAttribute color = vertices.color("color");
+        Color tint = Color.rgba(0.8, 0.4, 0.2, 1);
+        int[] i = {0};
+        assertAllocationFree(() -> {
+            int k = i[0] = (i[0] + 1) & 63;
+            uv.set(k, uv.get(k).add(Vec2.of(0.001, 0)));
+            color.set(k, color.get(k).interpolate(tint, 0.1));
+            sink += uv.x(k);
+        });
     }
 }
