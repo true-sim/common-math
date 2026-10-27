@@ -4,6 +4,10 @@ import com.truesim.common.math.JitInlining;
 import com.truesim.common.math.Mat4;
 import com.truesim.common.math.Transform;
 import com.truesim.common.math.Vec3;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.StructLayout;
+import java.lang.foreign.ValueLayout;
 
 /**
  * Immutable axis-aligned bounding box from {@code min} to {@code max} (inclusive).
@@ -18,6 +22,13 @@ public record Aabb(Vec3 min, Vec3 max) {
 
     /** Contains nothing; the neutral start for {@link #include} and {@link #union}. */
     public static final Aabb EMPTY = new Aabb(Vec3.splat(Double.POSITIVE_INFINITY), Vec3.splat(Double.NEGATIVE_INFINITY));
+
+    /** Memory layout: six doubles minX, minY, minZ, maxX, maxY, maxZ (48 bytes). */
+    public static final StructLayout LAYOUT = MemoryLayout.structLayout(
+        ValueLayout.JAVA_DOUBLE.withName("minX"), ValueLayout.JAVA_DOUBLE.withName("minY"), ValueLayout.JAVA_DOUBLE.withName("minZ"),
+        ValueLayout.JAVA_DOUBLE.withName("maxX"), ValueLayout.JAVA_DOUBLE.withName("maxY"), ValueLayout.JAVA_DOUBLE.withName("maxZ"));
+
+    private static final ValueLayout.OfDouble DOUBLE = ValueLayout.JAVA_DOUBLE_UNALIGNED;
 
     /** Box spanned by two corners, in any order. */
     public static Aabb of(Vec3 a, Vec3 b) {
@@ -129,5 +140,22 @@ public record Aabb(Vec3 min, Vec3 max) {
 
     private static double high(double factor, double a, double b) {
         return Math.max(factor * a, factor * b);
+    }
+
+    // ---------------------------------------------------------------- memory
+
+    public void write(MemorySegment segment, long offset) {
+        segment.set(DOUBLE, offset, min.x());
+        segment.set(DOUBLE, offset + 8, min.y());
+        segment.set(DOUBLE, offset + 16, min.z());
+        segment.set(DOUBLE, offset + 24, max.x());
+        segment.set(DOUBLE, offset + 32, max.y());
+        segment.set(DOUBLE, offset + 40, max.z());
+    }
+
+    public static Aabb read(MemorySegment segment, long offset) {
+        return new Aabb(
+            new Vec3(segment.get(DOUBLE, offset), segment.get(DOUBLE, offset + 8), segment.get(DOUBLE, offset + 16)),
+            new Vec3(segment.get(DOUBLE, offset + 24), segment.get(DOUBLE, offset + 32), segment.get(DOUBLE, offset + 40)));
     }
 }

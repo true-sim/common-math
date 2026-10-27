@@ -406,6 +406,137 @@ public final class Intersections {
         return 1 - 2 * (x * x + y * y);
     }
 
+    // ---------------------------------------------------------------- capsules
+    //
+    // A capsule is all points within radius r of the segment from a to b.
+
+    /** Squared distance between the closest points of segments p1-q1 and p2-q2 (Ericson 5.1.9). */
+    public static double segmentSegmentDistanceSquared(Vec3 p1, Vec3 q1, Vec3 p2, Vec3 q2) {
+        return segmentSegmentDistanceSquared(p1.x(), p1.y(), p1.z(), q1.x(), q1.y(), q1.z(),
+            p2.x(), p2.y(), p2.z(), q2.x(), q2.y(), q2.z());
+    }
+
+    public static double segmentSegmentDistanceSquared(
+        double p1x, double p1y, double p1z, double q1x, double q1y, double q1z,
+        double p2x, double p2y, double p2z, double q2x, double q2y, double q2z) {
+        double d1x = q1x - p1x;
+        double d1y = q1y - p1y;
+        double d1z = q1z - p1z;
+        double d2x = q2x - p2x;
+        double d2y = q2y - p2y;
+        double d2z = q2z - p2z;
+        double rx = p1x - p2x;
+        double ry = p1y - p2y;
+        double rz = p1z - p2z;
+        double a = d1x * d1x + d1y * d1y + d1z * d1z;
+        double e = d2x * d2x + d2y * d2y + d2z * d2z;
+        double f = d2x * rx + d2y * ry + d2z * rz;
+        double s;
+        double t;
+        if (a == 0) {
+            s = 0; // first segment is a point
+            t = e == 0 ? 0 : clamp01(f / e);
+        } else {
+            double c = d1x * rx + d1y * ry + d1z * rz;
+            if (e == 0) {
+                t = 0; // second segment is a point
+                s = clamp01(-c / a);
+            } else {
+                double b = d1x * d2x + d1y * d2y + d1z * d2z;
+                double denominator = a * e - b * b; // 0 when parallel: any s works, take 0
+                s = denominator == 0 ? 0 : clamp01((b * f - c * e) / denominator);
+                t = (b * s + f) / e;
+                if (t < 0) {
+                    t = 0;
+                    s = clamp01(-c / a);
+                } else if (t > 1) {
+                    t = 1;
+                    s = clamp01((b - c) / a);
+                }
+            }
+        }
+        double x = (p1x + d1x * s) - (p2x + d2x * t);
+        double y = (p1y + d1y * s) - (p2y + d2y * t);
+        double z = (p1z + d1z * s) - (p2z + d2z * t);
+        return x * x + y * y + z * z;
+    }
+
+    private static double clamp01(double v) {
+        return Math.max(0, Math.min(1, v));
+    }
+
+    public static boolean pointCapsule(Vec3 p, Vec3 a, Vec3 b, double radius) {
+        return pointCapsule(p.x(), p.y(), p.z(), a.x(), a.y(), a.z(), b.x(), b.y(), b.z(), radius);
+    }
+
+    public static boolean pointCapsule(
+        double px, double py, double pz, double ax, double ay, double az, double bx, double by, double bz, double r) {
+        double t = segmentClosestParameter(ax, ay, az, bx, by, bz, px, py, pz);
+        return pointSphere(px, py, pz, ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t, r);
+    }
+
+    public static boolean sphereCapsule(Vec3 center, double radius, Vec3 a, Vec3 b, double capsuleRadius) {
+        return sphereCapsule(center.x(), center.y(), center.z(), radius, a.x(), a.y(), a.z(), b.x(), b.y(), b.z(), capsuleRadius);
+    }
+
+    public static boolean sphereCapsule(
+        double cx, double cy, double cz, double r, double ax, double ay, double az, double bx, double by, double bz,
+        double capsuleRadius) {
+        return pointCapsule(cx, cy, cz, ax, ay, az, bx, by, bz, r + capsuleRadius);
+    }
+
+    public static boolean capsuleCapsule(Vec3 a1, Vec3 b1, double r1, Vec3 a2, Vec3 b2, double r2) {
+        return capsuleCapsule(a1.x(), a1.y(), a1.z(), b1.x(), b1.y(), b1.z(), r1, a2.x(), a2.y(), a2.z(),
+            b2.x(), b2.y(), b2.z(), r2);
+    }
+
+    public static boolean capsuleCapsule(
+        double a1x, double a1y, double a1z, double b1x, double b1y, double b1z, double r1,
+        double a2x, double a2y, double a2z, double b2x, double b2y, double b2z, double r2) {
+        double r = r1 + r2;
+        return segmentSegmentDistanceSquared(a1x, a1y, a1z, b1x, b1y, b1z, a2x, a2y, a2z, b2x, b2y, b2z) <= r * r;
+    }
+
+    /** Where the ray enters the capsule (0 if it starts inside). */
+    public static double rayCapsule(Vec3 origin, Vec3 direction, Vec3 a, Vec3 b, double radius) {
+        return rayCapsule(origin.x(), origin.y(), origin.z(), direction.x(), direction.y(), direction.z(),
+            a.x(), a.y(), a.z(), b.x(), b.y(), b.z(), radius);
+    }
+
+    public static double rayCapsule(
+        double ox, double oy, double oz, double dx, double dy, double dz,
+        double ax, double ay, double az, double bx, double by, double bz, double r) {
+        if (pointCapsule(ox, oy, oz, ax, ay, az, bx, by, bz, r)) {
+            return 0;
+        }
+        // From outside, the first entry is the nearest of the cylinder body (between the end planes) and the two
+        // end spheres.
+        double bax = bx - ax;
+        double bay = by - ay;
+        double baz = bz - az;
+        double oax = ox - ax;
+        double oay = oy - ay;
+        double oaz = oz - az;
+        double baba = bax * bax + bay * bay + baz * baz;
+        double bard = bax * dx + bay * dy + baz * dz;
+        double baoa = bax * oax + bay * oay + baz * oaz;
+        double rdoa = dx * oax + dy * oay + dz * oaz;
+        double oaoa = oax * oax + oay * oay + oaz * oaz;
+        double rdrd = dx * dx + dy * dy + dz * dz;
+        double qa = baba * rdrd - bard * bard; // 0 when the ray runs along the axis: only the end spheres count
+        double qb = baba * rdoa - baoa * bard;
+        double qc = baba * oaoa - baoa * baoa - r * r * baba;
+        double h = qb * qb - qa * qc;
+        double body = MISS;
+        if (qa > 0 && h >= 0) {
+            double t = (-qb - Math.sqrt(h)) / qa;
+            double y = baoa + t * bard;
+            body = t >= 0 && y > 0 && y < baba ? t : MISS;
+        }
+        return Math.min(body, Math.min(raySphere(ox, oy, oz, dx, dy, dz, ax, ay, az, r),
+            raySphere(ox, oy, oz, dx, dy, dz, bx, by, bz, r)));
+    }
+
     // ---------------------------------------------------------------- segments
 
     /** The {@code t} in [0, 1] of the point on segment start-end closest to {@code p}. */

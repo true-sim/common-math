@@ -132,6 +132,38 @@ class AllocationFreeTest {
     }
 
     @Test
+    void bvhQueriesAndRefit() {
+        com.truesim.common.math.random.Rng rng = com.truesim.common.math.random.Rng.seeded(2);
+        com.truesim.common.math.geometry.AabbArray boxes = com.truesim.common.math.geometry.AabbArray.onHeap(1_000);
+        for (int i = 0; i < boxes.size(); i++) {
+            Vec3 c = rng.nextVec3InSphere().scale(40);
+            boxes.set(i, c.x() - 0.5, c.y() - 0.5, c.z() - 0.5, c.x() + 0.5, c.y() + 0.5, c.z() + 0.5);
+        }
+        com.truesim.common.math.spatial.Bvh bvh = com.truesim.common.math.spatial.Bvh.build(boxes);
+        com.truesim.common.math.spatial.RayHit hit = new com.truesim.common.math.spatial.RayHit();
+        com.truesim.common.math.geometry.Frustum frustum = com.truesim.common.math.geometry.Frustum.fromMatrix(
+            Mat4.perspective(1, 1.5, 0.5, 60).mul(Mat4.lookAt(Vec3.of(0, 5, 50), Vec3.ZERO, Vec3.UP)));
+        int[] found = new int[1];
+        com.truesim.common.math.spatial.Bvh.Visitor count = p -> {
+            found[0]++;
+            return true;
+        };
+        com.truesim.common.math.spatial.Bvh.RayTest capsules = (p, ox, oy, oz, dx, dy, dz, max) ->
+            com.truesim.common.math.geometry.Intersections.rayCapsule(ox, oy, oz, dx, dy, dz,
+                boxes.get(p, 0), boxes.get(p, 1), boxes.get(p, 2), boxes.get(p, 3), boxes.get(p, 4), boxes.get(p, 5), 0.3);
+        assertAllocationFree(() -> {
+            bvh.raycast(0, 0, 60, 0.01, 0.02, -1, 1_000, capsules, hit);
+            sink += hit.distance() + bvh.queryAabb(-5, -5, -5, 5, 5, 5, count) + bvh.querySphere(3, 0, 0, 8, count)
+                + bvh.queryFrustum(frustum, count);
+        }, 2_000, 1_000, 20);
+        assertAllocationFree(() -> {
+            boxes.set(7, boxes.get(7, 0) + 0.01, boxes.get(7, 1), boxes.get(7, 2), boxes.get(7, 3) + 0.01, boxes.get(7, 4),
+                boxes.get(7, 5));
+            bvh.refit();
+        }, 2_000, 200, 20);
+    }
+
+    @Test
     void colorsAndEasing() {
         ColorArray colors = ColorArray.onHeap(64);
         colors.fill(Color.srgb(0x3366FF));

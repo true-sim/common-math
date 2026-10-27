@@ -143,8 +143,9 @@ Integer vectors `Vec2i` and `Vec3i` cover grids and voxels.
 
 ## Geometry
 
-`Ray`, `Plane`, `Aabb`, `Obb` (oriented box), `Sphere`, `Triangle`, `Segment`, `Rect` and
-`Frustum`, with containment, closest-point, overlap and ray queries. Ray queries return the hit
+`Ray`, `Plane`, `Aabb`, `Obb` (oriented box), `Sphere`, `Capsule`, `Triangle`, `Segment`, `Rect`
+and `Frustum`, with containment, closest-point, overlap and ray queries (including
+segment-segment distance for capsules). Ray queries return the hit
 distance, or `Double.POSITIVE_INFINITY` on a miss, so the nearest hit is a plain `min`.
 
 Shapes are in world space. To combine them with moving objects, either move the shape
@@ -161,6 +162,27 @@ Intersections.sphereAabb(cx, cy, cz, r, minX, minY, minZ, maxX, maxY, maxZ); // 
 
 The plain-doubles level never creates objects: use it for bulk work over data in arrays or
 memory (culling, broad phase). Oriented-box overlap is a branch-free separating-axis test.
+
+## Bounding volume hierarchy
+
+`Bvh` accelerates raycasts and overlap queries over many objects. Build it over the boxes in an
+`AabbArray`; nodes are stored flat in a `MemorySegment`, one 64-byte cache line each, in depth-first
+order with skip links, so queries walk memory front to back with no stack and no allocation, and
+any number of threads can query at once. It is built with a binned surface area heuristic; when
+objects move, update their boxes and call `refit()`.
+
+```java
+AabbArray bounds = AabbArray.allocate(arena, objects.length);   // one box per object
+Bvh bvh = Bvh.build(bounds);
+
+bvh.queryFrustum(frustum, object -> { draw(object); return true; });   // return false to stop
+bvh.raycast(ray, maxDistance, (object, ox, oy, oz, dx, dy, dz, max) ->
+    Intersections.rayCapsule(ox, oy, oz, dx, dy, dz, ...object's capsule...), hit);
+bounds.set(i, newBox); bvh.refit();                                    // objects moved
+```
+
+The per-object callbacks take and return plain numbers, so they never cause allocations; create
+them and the `RayHit` once and reuse them.
 
 ## Random numbers and noise
 

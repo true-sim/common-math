@@ -47,4 +47,9 @@ public record Segment(Vec3 start, Vec3 end) {
     public double distance(Vec3 p) {
         return closestPoint(p).distance(p);
     }
+
+    /** Distance between the closest points of this segment and {@code other}. */
+    public double distance(Segment other) {
+        return Math.sqrt(Intersections.segmentSegmentDistanceSquared(start, end, other.start, other.end));
+    }
 }
