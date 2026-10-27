@@ -10,12 +10,12 @@ public final class ColorAttribute extends Attribute {
 
     private final boolean srgb;
 
-    ColorAttribute(ElementBuffer buffer, ElementLayout.Field field) {
+    ColorAttribute(ElementBuffer buffer, Field<?> field) {
         super(buffer, field, accepts(field.format()));
         srgb = field.format() == Format.SRGB8_4;
     }
 
-    private static boolean accepts(Format format) {
+    static boolean accepts(Format format) {
         return switch (format) {
             case DOUBLE4, FLOAT4, HALF4, UNORM8_4, SRGB8_4 -> true;
             default -> false;

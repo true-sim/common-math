@@ -10,12 +10,12 @@ public final class QuatAttribute extends Attribute {
 
     private final boolean exact;
 
-    QuatAttribute(ElementBuffer buffer, ElementLayout.Field field) {
+    QuatAttribute(ElementBuffer buffer, Field<?> field) {
         super(buffer, field, accepts(field.format()));
         exact = field.format() == Format.DOUBLE4;
     }
 
-    private static boolean accepts(Format format) {
+    static boolean accepts(Format format) {
         return switch (format) {
             case DOUBLE4, FLOAT4, HALF4, SNORM16_4 -> true;
             default -> false;

@@ -13,13 +13,13 @@ public final class Vec3Attribute extends Attribute {
     private final boolean octahedral;
     private final boolean padded;
 
-    Vec3Attribute(ElementBuffer buffer, ElementLayout.Field field) {
+    Vec3Attribute(ElementBuffer buffer, Field<?> field) {
         super(buffer, field, accepts(field.format()));
         octahedral = field.format() == Format.OCT16;
         padded = field.format().components() == 4;
     }
 
-    private static boolean accepts(Format format) {
+    static boolean accepts(Format format) {
         return switch (format) {
             case DOUBLE3, FLOAT3, HALF4, SNORM8_4, SNORM16_4, OCT16 -> true;
             default -> false;

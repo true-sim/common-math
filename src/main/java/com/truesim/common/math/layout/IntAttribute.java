@@ -3,8 +3,12 @@ package com.truesim.common.math.layout;
 /** One 32-bit integer per element, e.g. an id or flags. Format: {@code INT1}. */
 public final class IntAttribute extends Attribute {
 
-    IntAttribute(ElementBuffer buffer, ElementLayout.Field field) {
-        super(buffer, field, field.format() == Format.INT1);
+    IntAttribute(ElementBuffer buffer, Field<?> field) {
+        super(buffer, field, accepts(field.format()));
+    }
+
+    static boolean accepts(Format format) {
+        return format == Format.INT1;
     }
 
     public int get(int index) {

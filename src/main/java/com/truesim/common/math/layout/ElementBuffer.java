@@ -67,6 +67,22 @@ public final class ElementBuffer {
         return segment;
     }
 
+    /**
+     * The view of a typed {@link Field} of this buffer's layout, without looking up its name.
+     *
+     * @throws IllegalArgumentException if the field belongs to another layout, or was added by name only
+     */
+    @SuppressWarnings("unchecked")
+    public <A extends Attribute> A attribute(Field<A> field) {
+        if (!layout.contains(field)) {
+            throw new IllegalArgumentException("Field " + field + " is not part of " + layout);
+        }
+        if (field.kind == null) {
+            throw new IllegalArgumentException("Field " + field + " was added by name: use vec3(name) and friends");
+        }
+        return (A) field.kind.view(this, field);
+    }
+
     public ScalarAttribute scalar(String name) {
         return new ScalarAttribute(this, layout.field(name));
     }

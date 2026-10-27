@@ -8,11 +8,11 @@ import com.truesim.common.math.Vec2;
  */
 public final class Vec2Attribute extends Attribute {
 
-    Vec2Attribute(ElementBuffer buffer, ElementLayout.Field field) {
+    Vec2Attribute(ElementBuffer buffer, Field<?> field) {
         super(buffer, field, accepts(field.format()));
     }
 
-    private static boolean accepts(Format format) {
+    static boolean accepts(Format format) {
         return switch (format) {
             case DOUBLE2, FLOAT2, HALF2, UNORM16_2, SNORM16_2 -> true;
             default -> false;
