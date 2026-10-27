@@ -8,11 +8,11 @@ import com.truesim.common.math.Vec4;
  */
 public final class Vec4Attribute extends Attribute {
 
-    Vec4Attribute(ElementBuffer buffer, ElementLayout.Field field) {
+    Vec4Attribute(ElementBuffer buffer, Field<?> field) {
         super(buffer, field, accepts(field.format()));
     }
 
-    private static boolean accepts(Format format) {
+    static boolean accepts(Format format) {
         return switch (format) {
             case DOUBLE4, FLOAT4, HALF4, UNORM8_4, SNORM8_4, UNORM16_4, SNORM16_4 -> true;
             default -> false;

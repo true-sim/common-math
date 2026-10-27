@@ -223,16 +223,16 @@ format's natural alignment). `ElementBuffer` puts elements in any `MemorySegment
 Typed views read and write one attribute across all elements without allocating.
 
 ```java
-ElementLayout vertex = ElementLayout.builder()
-    .attribute("position", Format.FLOAT3)
-    .attribute("normal", Format.OCT16)     // unit vector in 4 bytes
-    .attribute("uv", Format.HALF2)
-    .attribute("color", Format.SRGB8_4)    // same bytes as Color.writeRgba8
-    .build();                              // 24 bytes per vertex; memoryLayout() for FFM
+ElementLayout.Builder builder = ElementLayout.builder();
+Field<Vec3Attribute> POSITION = builder.vec3("position", Format.FLOAT3);
+Field<Vec3Attribute> NORMAL = builder.vec3("normal", Format.OCT16);     // unit vector in 4 bytes
+Field<Vec2Attribute> UV = builder.vec2("uv", Format.HALF2);
+Field<ColorAttribute> COLOR = builder.color("color", Format.SRGB8_4);  // same bytes as Color.writeRgba8
+ElementLayout vertex = builder.build();  // 24 bytes per vertex; memoryLayout() for FFM
 
 ElementBuffer vertices = ElementBuffer.allocate(arena, vertex, count);
-Vec3Attribute position = vertices.vec3("position");
-Vec3Attribute normal = vertices.vec3("normal");
+Vec3Attribute position = vertices.attribute(POSITION); // typed handle: no names to misspell
+Vec3Attribute normal = vertices.attribute(NORMAL);
 position.set(i, p);
 position.transformPoints(model);
 normal.transformDirections(model);
@@ -246,6 +246,10 @@ normal.transformDirections(model);
 | `SRGB8_4` | color bytes, RGB sRGB-encoded, alpha linear |
 | `OCT16` | unit vector, octahedral encoding in two `SNORM16` |
 | `INT1` | 32-bit integer (ids, flags) |
+
+Typed fields (`builder.vec3(name, format)` and friends) are handles: `attribute(field)` gives their
+view without any lookup by name, and a format the view cannot hold fails when the layout is built.
+For layouts read from data, `builder.attribute(name, format)` and `buffer.vec3(name)` work by name.
 
 Views: `scalar`, `ints`, `vec2`, `vec3`, `vec4`, `quat`, `color`; each accepts the formats that can
 hold its type (a `Vec3` fits `FLOAT3`, `OCT16`, or a padded four-component format). For a

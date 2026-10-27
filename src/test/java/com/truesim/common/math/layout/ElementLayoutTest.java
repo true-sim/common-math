@@ -39,7 +39,7 @@ class ElementLayoutTest {
         assertThat(VERTEX.field("normal").offset()).isEqualTo(12);
         assertThat(VERTEX.field("uv").offset()).isEqualTo(16);
         assertThat(VERTEX.field("color").offset()).isEqualTo(20);
-        assertThat(VERTEX.fields()).extracting(ElementLayout.Field::name).containsExactly("position", "normal", "uv", "color");
+        assertThat(VERTEX.fields()).extracting(Field::name).containsExactly("position", "normal", "uv", "color");
         StructLayout struct = VERTEX.memoryLayout();
         assertThat(struct.byteSize()).isEqualTo(24);
         assertThat(struct.byteOffset(PathElement.groupElement("uv"))).isEqualTo(16);
@@ -91,6 +91,68 @@ class ElementLayoutTest {
         assertThatIllegalArgumentException().isThrownBy(() -> ElementLayout.builder().alignment(0));
         assertThatIllegalArgumentException().isThrownBy(() -> ElementLayout.builder().alignment(12));
         assertThatIllegalStateException().isThrownBy(() -> ElementLayout.builder().build());
+    }
+
+    @Test
+    void typedFields() {
+        ElementLayout.Builder builder = ElementLayout.builder();
+        Field<Vec3Attribute> position = builder.vec3("position", Format.FLOAT3);
+        Field<Vec3Attribute> normal = builder.vec3("normal", Format.OCT16);
+        Field<Vec2Attribute> uv = builder.vec2("uv", Format.HALF2);
+        Field<Vec4Attribute> tangent = builder.vec4("tangent", Format.SNORM8_4);
+        Field<QuatAttribute> spin = builder.quat("spin", Format.FLOAT4);
+        Field<ColorAttribute> color = builder.color("color", Format.SRGB8_4);
+        Field<ScalarAttribute> age = builder.scalar("age", Format.FLOAT1);
+        Field<IntAttribute> id = builder.ints("id", Format.INT1);
+        builder.attribute("extra", Format.FLOAT2);
+        ElementLayout layout = builder.build();
+        ElementBuffer buffer = ElementBuffer.onHeap(layout, 3);
+        // Views straight from the handles: no names involved.
+        buffer.attribute(position).set(2, Vec3.of(1, 2, 3));
+        buffer.attribute(normal).set(2, Vec3.UNIT_Y);
+        buffer.attribute(uv).set(2, Vec2.of(0.5, 0.25));
+        buffer.attribute(tangent).set(2, Vec4.of(1, 0, 0, -1));
+        buffer.attribute(spin).set(2, Quat.IDENTITY);
+        buffer.attribute(color).set(2, Color.rgba(1, 0, 0, 1));
+        buffer.attribute(age).set(2, 1.5);
+        buffer.attribute(id).set(2, 42);
+        // The same memory through the name-based views.
+        assertThat(buffer.vec3("position").get(2)).isEqualTo(Vec3.of(1, 2, 3));
+        assertThat(buffer.vec3("normal").get(2).y()).isEqualTo(1);
+        assertThat(buffer.vec2("uv").get(2)).isEqualTo(Vec2.of(0.5, 0.25));
+        assertThat(buffer.vec4("tangent").w(2)).isEqualTo(-1);
+        assertThat(buffer.quat("spin").get(2)).isEqualTo(Quat.IDENTITY);
+        assertThat(buffer.color("color").get(2).r()).isEqualTo(1);
+        assertThat(buffer.scalar("age").get(2)).isEqualTo(1.5);
+        assertThat(buffer.ints("id").get(2)).isEqualTo(42);
+        assertThat(position.name()).isEqualTo("position");
+        assertThat(position.format()).isEqualTo(Format.FLOAT3);
+        assertThat(normal.offset()).isEqualTo(12);
+        assertThat(position.toString()).isEqualTo("position: FLOAT3 @0");
+        assertThat(layout.fields()).startsWith(position, normal);
+        assertThat(layout.field("uv")).isSameAs(uv);
+    }
+
+    @Test
+    void typedFieldsAreCheckedEarly() {
+        // A format the view cannot hold fails when the layout is built, not on first use.
+        assertThatIllegalArgumentException().isThrownBy(() -> ElementLayout.builder().vec3("p", Format.HALF2))
+            .withMessage("A vec3 attribute cannot use HALF2");
+        assertThatIllegalArgumentException().isThrownBy(() -> ElementLayout.builder().color("c", Format.SNORM8_4));
+        // Handles belong to their layout.
+        ElementLayout.Builder builder = ElementLayout.builder();
+        Field<Vec3Attribute> position = builder.vec3("position", Format.FLOAT3);
+        builder.build();
+        ElementLayout.Builder twin = ElementLayout.builder();
+        twin.vec3("position", Format.FLOAT3);
+        ElementBuffer other = ElementBuffer.onHeap(twin.build(), 1);
+        assertThatIllegalArgumentException().isThrownBy(() -> other.attribute(position))
+            .withMessageContaining("is not part of");
+        // Fields added by name have no typed view.
+        ElementBuffer named = ElementBuffer.onHeap(ElementLayout.of("p", Format.FLOAT3), 1);
+        Field<?> untyped = named.layout().field("p");
+        assertThatIllegalArgumentException().isThrownBy(() -> named.attribute(untyped))
+            .withMessageContaining("was added by name");
     }
 
     // ---------------------------------------------------------------- buffers

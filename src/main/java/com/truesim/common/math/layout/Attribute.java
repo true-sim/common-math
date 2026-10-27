@@ -23,7 +23,7 @@ public abstract sealed class Attribute
     private final int size;
     private final long componentBytes;
 
-    Attribute(ElementBuffer buffer, ElementLayout.Field field, boolean accepted) {
+    Attribute(ElementBuffer buffer, Field<?> field, boolean accepted) {
         if (!accepted) {
             throw new IllegalArgumentException(
                 getClass().getSimpleName() + " cannot hold " + field.name() + " in format " + field.format());

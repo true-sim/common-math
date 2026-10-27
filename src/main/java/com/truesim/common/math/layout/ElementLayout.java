@@ -4,34 +4,34 @@ import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.StructLayout;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The layout of one element of interleaved data, such as a vertex or a particle: named attributes, each with a
  * {@link Format}, at offsets computed from their natural alignment, and the stride from one element to the next.
  *
+ * <p>The builder's typed methods return {@link Field} handles, which give their views without looking up names:
+ *
  * <pre>{@code
- * ElementLayout vertex = ElementLayout.builder()
- *     .attribute("position", Format.FLOAT3)
- *     .attribute("normal", Format.OCT16)
- *     .attribute("uv", Format.HALF2)
- *     .attribute("color", Format.SRGB8_4)
- *     .build(); // 24 bytes per vertex
+ * ElementLayout.Builder builder = ElementLayout.builder();
+ * Field<Vec3Attribute> position = builder.vec3("position", Format.FLOAT3);
+ * Field<Vec3Attribute> normal = builder.vec3("normal", Format.OCT16);
+ * Field<Vec2Attribute> uv = builder.vec2("uv", Format.HALF2);
+ * Field<ColorAttribute> color = builder.color("color", Format.SRGB8_4);
+ * ElementLayout vertex = builder.build(); // 24 bytes per vertex
  * }</pre>
  *
- * <p>{@link #memoryLayout()} describes the same layout as a {@link StructLayout}, for the foreign function and memory
- * API or to derive a GPU vertex description.
+ * <p>For layouts read from data, {@link Builder#attribute(String, Format)} adds attributes by name, and
+ * {@link ElementBuffer#vec3(String)} and friends find them by name. {@link #memoryLayout()} describes the layout as a
+ * {@link StructLayout}, for the foreign function and memory API or to derive a GPU vertex description.
  */
 public final class ElementLayout {
 
-    /** One attribute: its name, format and byte offset within the element. */
-    public record Field(String name, Format format, long offset) {
-    }
-
-    private final List<Field> fields;
+    private final List<Field<?>> fields;
     private final long stride;
     private final long alignment;
 
-    private ElementLayout(List<Field> fields, long stride, long alignment) {
+    private ElementLayout(List<Field<?>> fields, long stride, long alignment) {
         this.fields = List.copyOf(fields);
         this.stride = stride;
         this.alignment = alignment;
@@ -47,18 +47,28 @@ public final class ElementLayout {
     }
 
     /** The attributes in order. */
-    public List<Field> fields() {
+    public List<Field<?>> fields() {
         return fields;
     }
 
     /** The attribute called {@code name}. */
-    public Field field(String name) {
-        for (Field field : fields) {
+    public Field<?> field(String name) {
+        for (Field<?> field : fields) {
             if (field.name().equals(name)) {
                 return field;
             }
         }
         throw new IllegalArgumentException("No attribute " + name + " in " + this);
+    }
+
+    /** Whether {@code field} is one of this layout's own fields. */
+    boolean contains(Field<?> field) {
+        for (Field<?> own : fields) {
+            if (own == field) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Bytes from one element to the next. */
@@ -75,7 +85,7 @@ public final class ElementLayout {
     public StructLayout memoryLayout() {
         List<MemoryLayout> members = new ArrayList<>();
         long cursor = 0;
-        for (Field field : fields) {
+        for (Field<?> field : fields) {
             if (field.offset() > cursor) {
                 members.add(MemoryLayout.paddingLayout(field.offset() - cursor));
             }
@@ -95,8 +105,8 @@ public final class ElementLayout {
     @Override
     public String toString() {
         StringBuilder text = new StringBuilder("ElementLayout[");
-        for (Field field : fields) {
-            text.append(field.name()).append(": ").append(field.format()).append(" @").append(field.offset()).append(", ");
+        for (Field<?> field : fields) {
+            text.append(field).append(", ");
         }
         return text.append("stride ").append(stride).append(']').toString();
     }
@@ -104,24 +114,65 @@ public final class ElementLayout {
     /** Collects attributes in order; each starts at the next offset its format's alignment allows. */
     public static final class Builder {
 
-        private final List<Field> fields = new ArrayList<>();
+        private final List<Field<?>> fields = new ArrayList<>();
         private long end;
         private long alignment = 1;
 
         private Builder() {
         }
 
+        /** Adds an attribute found by name later, e.g. for layouts read from data. */
         public Builder attribute(String name, Format format) {
-            for (Field field : fields) {
+            add(name, format, null);
+            return this;
+        }
+
+        /** Adds a number per element ({@code DOUBLE1}, {@code FLOAT1}). */
+        public Field<ScalarAttribute> scalar(String name, Format format) {
+            return add(name, format, Field.Kind.SCALAR);
+        }
+
+        /** Adds a 32-bit integer per element ({@code INT1}). */
+        public Field<IntAttribute> ints(String name, Format format) {
+            return add(name, format, Field.Kind.INT);
+        }
+
+        public Field<Vec2Attribute> vec2(String name, Format format) {
+            return add(name, format, Field.Kind.VEC2);
+        }
+
+        public Field<Vec3Attribute> vec3(String name, Format format) {
+            return add(name, format, Field.Kind.VEC3);
+        }
+
+        public Field<Vec4Attribute> vec4(String name, Format format) {
+            return add(name, format, Field.Kind.VEC4);
+        }
+
+        public Field<QuatAttribute> quat(String name, Format format) {
+            return add(name, format, Field.Kind.QUAT);
+        }
+
+        public Field<ColorAttribute> color(String name, Format format) {
+            return add(name, format, Field.Kind.COLOR);
+        }
+
+        private <A extends Attribute> Field<A> add(String name, Format format, Field.Kind kind) {
+            if (kind != null && !kind.accepts(format)) {
+                throw new IllegalArgumentException(
+                    "A " + kind.name().toLowerCase(Locale.ROOT) + " attribute cannot use " + format);
+            }
+            for (Field<?> field : fields) {
                 if (field.name().equals(name)) {
                     throw new IllegalArgumentException("Duplicate attribute " + name);
                 }
             }
             long offset = align(end, format.alignment());
-            fields.add(new Field(name, format, offset));
+            Field<A> field = new Field<>(name, format, offset, kind);
+            fields.add(field);
             end = offset + format.byteSize();
             alignment = Math.max(alignment, format.alignment());
-            return this;
+            return field;
         }
 
         /**
