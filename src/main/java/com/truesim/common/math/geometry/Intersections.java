@@ -134,18 +134,34 @@ public final class Intersections {
     public static double rayAabb(
         double ox, double oy, double oz, double dx, double dy, double dz,
         double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
-        double t1 = (minX - ox) / dx;
-        double t2 = (maxX - ox) / dx;
-        double near = Math.min(t1, t2);
-        double far = Math.max(t1, t2);
-        t1 = (minY - oy) / dy;
-        t2 = (maxY - oy) / dy;
-        near = Math.max(near, Math.min(t1, t2));
-        far = Math.min(far, Math.max(t1, t2));
-        t1 = (minZ - oz) / dz;
-        t2 = (maxZ - oz) / dz;
-        near = Math.max(Math.max(near, Math.min(t1, t2)), 0);
-        far = Math.min(far, Math.max(t1, t2));
+        // Slabs one axis at a time. A ray parallel to an axis is inside that slab or misses: dividing would give 0 / 0
+        // for an origin exactly on a face, e.g. a vertical ray along a grid line over a flat floor.
+        double near = 0;
+        double far = Double.POSITIVE_INFINITY;
+        if (dx != 0) {
+            double t1 = (minX - ox) / dx;
+            double t2 = (maxX - ox) / dx;
+            near = Math.max(near, Math.min(t1, t2));
+            far = Math.min(far, Math.max(t1, t2));
+        } else if (ox < minX || ox > maxX) {
+            return MISS;
+        }
+        if (dy != 0) {
+            double t1 = (minY - oy) / dy;
+            double t2 = (maxY - oy) / dy;
+            near = Math.max(near, Math.min(t1, t2));
+            far = Math.min(far, Math.max(t1, t2));
+        } else if (oy < minY || oy > maxY) {
+            return MISS;
+        }
+        if (dz != 0) {
+            double t1 = (minZ - oz) / dz;
+            double t2 = (maxZ - oz) / dz;
+            near = Math.max(near, Math.min(t1, t2));
+            far = Math.min(far, Math.max(t1, t2));
+        } else if (oz < minZ || oz > maxZ) {
+            return MISS;
+        }
         return near <= far ? near : MISS;
     }
 
