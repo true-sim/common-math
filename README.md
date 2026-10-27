@@ -184,6 +184,18 @@ bounds.set(i, newBox); bvh.refit();                                    // object
 The per-object callbacks take and return plain numbers, so they never cause allocations; create
 them and the `RayHit` once and reuse them.
 
+Refit keeps the tree structure, so quality drops as objects move far from where they were at
+build time. `degradation()` reports it as the surface-area cost relative to right after the last
+build (1 = as good as new), computed during `refit()` at almost no cost. Deciding when to rebuild
+is left to the owner of the tree, which knows the frame budget and threading:
+
+```java
+bvh.refit();
+if (bvh.degradation() > 1.5) {
+    bvh.rebuild();   // in place, same memory; or build a new Bvh on another thread and swap
+}
+```
+
 ## Random numbers and noise
 
 `Rng` is a seeded, deterministic generator (xoshiro256++ with SplitMix64 seeding): same seed,

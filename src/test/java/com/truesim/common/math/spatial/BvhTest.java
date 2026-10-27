@@ -120,6 +120,47 @@ class BvhTest {
     }
 
     @Test
+    void degradationAndRebuild() {
+        Rng rng = Rng.seeded(34);
+        AabbArray boxes = randomBoxes(rng, 1_000);
+        Bvh bvh = Bvh.build(boxes);
+        long memory = bvh.nodes().address();
+        assertThat(bvh.degradation()).isEqualTo(1.0);
+        bvh.refit();
+        assertThat(bvh.degradation()).isEqualTo(1.0); // nothing moved
+
+        // Every object moves to a random new place: the refit tree overlaps badly.
+        for (int i = 0; i < boxes.size(); i++) {
+            Aabb box = boxes.get(i);
+            Vec3 move = rng.nextVec3InSphere().scale(60);
+            boxes.set(i, new Aabb(box.min().add(move), box.max().add(move)));
+        }
+        bvh.refit();
+        assertThat(bvh.degradation()).isGreaterThan(2);
+        assertMatchesBruteForce(bvh, boxes, rng); // still correct, just slower
+
+        bvh.rebuild();
+        assertThat(bvh.degradation()).isEqualTo(1.0);
+        assertThat(bvh.nodes().address()).isEqualTo(memory); // same memory
+        assertThat(bvh.nodes().byteSize()).isEqualTo((long) Bvh.NODE_BYTES * bvh.nodeCount());
+        assertMatchesBruteForce(bvh, boxes, rng);
+    }
+
+    @Test
+    void degradationEdgeCases() {
+        Bvh empty = Bvh.build(AabbArray.onHeap(0));
+        assertThat(empty.degradation()).isEqualTo(1.0);
+        empty.rebuild();
+        assertThat(empty.nodeCount()).isZero();
+
+        AabbArray points = AabbArray.onHeap(10);
+        points.fill(new Aabb(Vec3.ONE, Vec3.ONE)); // all in one point: the root has no area
+        Bvh flat = Bvh.build(points);
+        flat.refit();
+        assertThat(flat.degradation()).isEqualTo(1.0);
+    }
+
+    @Test
     void customRayTestsAndEarlyStop() {
         Rng rng = Rng.seeded(33);
         AabbArray boxes = randomBoxes(rng, 300);

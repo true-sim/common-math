@@ -160,6 +160,7 @@ class AllocationFreeTest {
             boxes.set(7, boxes.get(7, 0) + 0.01, boxes.get(7, 1), boxes.get(7, 2), boxes.get(7, 3) + 0.01, boxes.get(7, 4),
                 boxes.get(7, 5));
             bvh.refit();
+            sink += bvh.degradation();
         }, 2_000, 200, 20);
     }
 

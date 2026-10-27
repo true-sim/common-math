@@ -57,16 +57,22 @@ public final class Bvh {
     private final AabbArray bounds;
     private final MemorySegment nodes;
     private final MemorySegment indices;
-    private final int nodeCount;
+    private final int maxLeafSize;
     private final RayTest boundsTest;
+    private int nodeCount;
+    private double buildCost;
+    private double cost;
 
     @AllowAllocation("one bounds test per hierarchy")
-    private Bvh(AabbArray bounds, MemorySegment nodes, MemorySegment indices, int nodeCount) {
+    private Bvh(AabbArray bounds, MemorySegment nodes, MemorySegment indices, int nodeCount, int maxLeafSize) {
         this.bounds = bounds;
         this.nodes = nodes;
         this.indices = indices;
         this.nodeCount = nodeCount;
+        this.maxLeafSize = maxLeafSize;
         this.boundsTest = this::intersectBounds;
+        this.cost = sahCost();
+        this.buildCost = cost;
     }
 
     /** Builds a hierarchy over all boxes of {@code bounds}, at most 4 per leaf, in memory freed by the GC. */
@@ -83,13 +89,20 @@ public final class Bvh {
         if (maxLeafSize < 1) {
             throw new IllegalArgumentException("Leaf size must be at least 1: " + maxLeafSize);
         }
+        // Room for the largest possible tree (2n - 1 nodes), so rebuild() never needs new memory.
+        MemorySegment nodes = arena.allocate((long) NODE_BYTES * Math.max(2L * bounds.size() - 1, 0), 8);
+        MemorySegment indices = arena.allocate(4L * bounds.size(), 4);
+        return new Bvh(bounds, nodes, indices, construct(bounds, maxLeafSize, nodes, indices), maxLeafSize);
+    }
+
+    /** Builds the tree into {@code nodes} and {@code indices} and returns its node count. */
+    @AllowAllocation("building")
+    private static int construct(AabbArray bounds, int maxLeafSize, MemorySegment nodes, MemorySegment indices) {
         Builder builder = new Builder(bounds, maxLeafSize);
         int count = builder.build();
-        MemorySegment nodes = arena.allocate((long) NODE_BYTES * count, 8);
         MemorySegment.copy(MemorySegment.ofArray(builder.nodes), 0, nodes, 0, (long) NODE_BYTES * count);
-        MemorySegment indices = arena.allocate(4L * bounds.size(), 4);
         MemorySegment.copy(MemorySegment.ofArray(builder.order), 0, indices, 0, 4L * bounds.size());
-        return new Bvh(bounds, nodes, indices, count);
+        return count;
     }
 
     // ---------------------------------------------------------------- properties
@@ -109,7 +122,7 @@ public final class Bvh {
 
     /** The node memory (see {@link #NODE_BYTES}), e.g. to upload to the GPU. */
     public MemorySegment nodes() {
-        return nodes.asReadOnly();
+        return nodes.asSlice(0, (long) NODE_BYTES * nodeCount).asReadOnly();
     }
 
     /** Bounds of everything, or {@link Aabb#EMPTY} if there are no primitives. */
@@ -161,6 +174,53 @@ public final class Bvh {
             nodes.set(DOUBLE, o + 32, maxY);
             nodes.set(DOUBLE, o + 40, maxZ);
         }
+        cost = sahCost();
+    }
+
+    // ---------------------------------------------------------------- quality
+
+    /**
+     * How much slower queries are expected to be than right after the last build: the current surface area heuristic
+     * cost divided by the cost at build time. 1 after a build; grows as {@link #refit()} follows objects that move
+     * apart. The owner decides when it is worth a {@link #rebuild()}, e.g. above 1.5.
+     */
+    public double degradation() {
+        return buildCost == 0 ? 1 : cost / buildCost;
+    }
+
+    /**
+     * Rebuilds the tree from the current primitive boxes in the same memory, restoring full quality. Allocates
+     * temporary build data; not thread-safe with queries.
+     */
+    @AllowAllocation("building")
+    public void rebuild() {
+        nodeCount = construct(bounds, maxLeafSize, nodes, indices);
+        cost = sahCost();
+        buildCost = cost;
+    }
+
+    /**
+     * Expected cost of a query relative to testing the root box: each node's surface area relative to the root,
+     * weighted by one for inner nodes and by the number of primitives for leaves.
+     */
+    private double sahCost() {
+        if (nodeCount == 0) {
+            return 0;
+        }
+        double sum = 0;
+        for (int node = 0; node < nodeCount; node++) {
+            long o = (long) node * NODE_BYTES;
+            sum += area(o) * Math.max(1, nodes.get(INT, o + COUNT));
+        }
+        double root = area(0);
+        return root > 0 ? sum / root : 0;
+    }
+
+    private double area(long o) {
+        double x = nodes.get(DOUBLE, o + 24) - nodes.get(DOUBLE, o);
+        double y = nodes.get(DOUBLE, o + 32) - nodes.get(DOUBLE, o + 8);
+        double z = nodes.get(DOUBLE, o + 40) - nodes.get(DOUBLE, o + 16);
+        return 2 * (x * y + y * z + z * x);
     }
 
     // ---------------------------------------------------------------- raycasts
