@@ -36,6 +36,33 @@ class GeometryTest {
     }
 
     @Test
+    void axisParallelRaysOnBoxFaces() {
+        // Rays along each axis, with the other two coordinates on a face, inside, or outside the box [0, 1]^3.
+        double[] offsets = {0, 1, 0.5, -0.5, 1.5};
+        boolean[] inside = {true, true, true, false, false};
+        for (int axis = 0; axis < 3; axis++) {
+            for (int i = 0; i < offsets.length; i++) {
+                for (int j = 0; j < offsets.length; j++) {
+                    double[] origin = new double[3];
+                    double[] direction = new double[3];
+                    origin[axis] = -2;
+                    direction[axis] = 1;
+                    origin[(axis + 1) % 3] = offsets[i];
+                    origin[(axis + 2) % 3] = offsets[j];
+                    double t = Intersections.rayAabb(origin[0], origin[1], origin[2], direction[0], direction[1],
+                        direction[2], 0, 0, 0, 1, 1, 1);
+                    assertThat(t).as("axis %d, %s %s", axis, offsets[i], offsets[j])
+                        .isEqualTo(inside[i] && inside[j] ? 2 : Double.POSITIVE_INFINITY);
+                }
+            }
+        }
+        // A vertical ray exactly on the edge of a flat floor tile.
+        assertThat(Intersections.rayAabb(4, 10, 4, 0, -1, 0, 2, 0, 2, 4, 0, 4)).isEqualTo(10);
+        assertThat(new Aabb(Vec3.of(2, 0, 2), Vec3.of(4, 0, 4)).intersect(new Ray(Vec3.of(2, 10, 3), Vec3.of(0, -1, 0))))
+            .isEqualTo(10);
+    }
+
+    @Test
     void planes() {
         Plane floor = Plane.fromPointNormal(Vec3.of(0, 1, 0), Vec3.of(0, 3, 0));
         assertThat(floor).isEqualTo(new Plane(Vec3.UP, 1));
