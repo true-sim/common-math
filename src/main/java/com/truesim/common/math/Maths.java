@@ -280,6 +280,22 @@ public final class Maths {
         return lerp(outMin, outMax, inverseLerp(inMin, inMax, value));
     }
 
+    /** Fractional part: {@code x - floor(x)}, in [0, 1). */
+    public static double fract(double x) {
+        return x - Math.floor(x);
+    }
+
+    /** 0 below {@code edge}, 1 at or above it (as in GLSL). */
+    public static double step(double edge, double x) {
+        return x < edge ? 0 : 1;
+    }
+
+    /** Bounces {@code t} back and forth between 0 and {@code length}. */
+    public static double pingPong(double t, double length) {
+        double r = wrap(t, 0, 2 * length);
+        return length - Math.abs(r - length);
+    }
+
     /** Hermite smoothing between 0 (at edge0) and 1 (at edge1). */
     public static double smoothstep(double edge0, double edge1, double x) {
         double t = clamp01((x - edge0) / (edge1 - edge0));

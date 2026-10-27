@@ -126,15 +126,13 @@ public record Vec2(double x, double y) implements Linear<Vec2> {
     /** This vector scaled to length 1, or {@link #ZERO} if it has length 0. */
     public Vec2 normalize() {
         double length = length();
-        return length == 0 ? ZERO : new Vec2(x / length, y / length);
+        double inverse = length == 0 ? 0 : 1 / length;
+        return new Vec2(x * inverse, y * inverse);
     }
 
     public Vec2 clampLength(double maxLength) {
         double lengthSquared = lengthSquared();
-        if (lengthSquared <= maxLength * maxLength) {
-            return this;
-        }
-        return scale(maxLength / Math.sqrt(lengthSquared));
+        return scale(lengthSquared <= maxLength * maxLength ? 1 : maxLength / Math.sqrt(lengthSquared));
     }
 
     /** Direction of this vector in radians, in [-pi, pi]. */
@@ -154,6 +152,21 @@ public record Vec2(double x, double y) implements Linear<Vec2> {
         return new Vec2(x * cos - y * sin, x * sin + y * cos);
     }
 
+    /** Moves towards {@code target} by at most {@code maxDistance}, arriving exactly. */
+    public Vec2 moveTowards(Vec2 target, double maxDistance) {
+        double dx = target.x - x;
+        double dy = target.y - y;
+        double distance = Math.sqrt(dx * dx + dy * dy);
+        boolean arrive = distance <= maxDistance;
+        double f = arrive ? 0 : maxDistance / distance;
+        return new Vec2(arrive ? target.x : Math.fma(dx, f, x), arrive ? target.y : Math.fma(dy, f, y));
+    }
+
+    /** Component-wise floor to integer coordinates, e.g. the grid cell containing this point. */
+    public Vec2i floor() {
+        return new Vec2i((int) Math.floor(x), (int) Math.floor(y));
+    }
+
     // ---------------------------------------------------------------- geometry
 
     /** Reflection off a surface with the given unit {@code normal}. */
@@ -163,7 +176,7 @@ public record Vec2(double x, double y) implements Linear<Vec2> {
 
     public Vec2 project(Vec2 onto) {
         double lengthSquared = onto.lengthSquared();
-        return lengthSquared == 0 ? ZERO : onto.scale(dot(onto) / lengthSquared);
+        return onto.scale(lengthSquared == 0 ? 0 : dot(onto) / lengthSquared);
     }
 
     public Vec2 reject(Vec2 onto) {

@@ -268,7 +268,8 @@ public record Color(double r, double g, double b, double a) implements Linear<Co
 
     /** Inverse of {@link #premultiply()}; fully transparent colors become {@link #TRANSPARENT}. */
     public Color unpremultiply() {
-        return a == 0 ? TRANSPARENT : new Color(r / a, g / a, b / a, a);
+        double inverse = a == 0 ? 0 : 1 / a;
+        return new Color(r * inverse, g * inverse, b * inverse, a);
     }
 
     /** Relative luminance (Rec. 709 / sRGB primaries). */

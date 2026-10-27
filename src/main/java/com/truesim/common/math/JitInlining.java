@@ -14,7 +14,9 @@ import javax.management.ObjectName;
  * this library therefore installs a compiler directive (the runtime equivalent of {@code jcmd Compiler.directives_add})
  * that always inlines the methods of its value types and the methods of its array types that create values. Methods
  * that only read and write memory are left to the JIT's normal heuristics: forcing those inline produces compilation
- * units too large for the JIT. Results are identical either way; only allocation changes.
+ * units too large for the JIT. The transcendental functions behind {@link Maths} are never inlined: they return plain
+ * doubles, and inlining them would use up the JIT's per-method budget before the value code. Results are identical
+ * either way; only allocation changes.
  *
  * <p>Disable with {@code -Dtruesim.math.inline=false}. On JVMs without HotSpot's diagnostic commands the directive is
  * skipped. The directive matches all methods, so it takes precedence over other compiler directives added before it.
@@ -30,9 +32,20 @@ public final class JitInlining {
         [{
           match: "*.*",
           inline: [
+            "-com/truesim/common/math/Fdlibm.*",
             "+com/truesim/common/math/Vec2.*", "+com/truesim/common/math/Vec3.*", "+com/truesim/common/math/Vec4.*",
             "+com/truesim/common/math/Quat.*", "+com/truesim/common/math/Mat3.*", "+com/truesim/common/math/Mat4.*",
             "+com/truesim/common/math/Scalar.*", "+com/truesim/common/math/color/Color.*",
+            "+com/truesim/common/math/Transform.*", "+com/truesim/common/math/Transform2D.*",
+            "+com/truesim/common/math/Vec2i.*", "+com/truesim/common/math/Vec3i.*",
+            "+com/truesim/common/math/TransformArray.get", "+com/truesim/common/math/TransformArray.set",
+            "+com/truesim/common/math/geometry/Ray.*", "+com/truesim/common/math/geometry/Plane.*",
+            "+com/truesim/common/math/geometry/Aabb.*", "+com/truesim/common/math/geometry/Sphere.*",
+            "+com/truesim/common/math/geometry/Triangle.*", "+com/truesim/common/math/geometry/Segment.*",
+            "+com/truesim/common/math/geometry/Rect.*", "+com/truesim/common/math/geometry/Obb.*",
+            "+com/truesim/common/math/geometry/Frustum.*",
+            "+com/truesim/common/math/curve/Frame.*", "+com/truesim/common/math/numeric/Roots.*",
+            "+com/truesim/common/math/random/Rng.next*",
             "+com/truesim/common/math/Vec2Array.get", "+com/truesim/common/math/Vec2Array.set",
             "+com/truesim/common/math/Vec3Array.get", "+com/truesim/common/math/Vec3Array.set",
             "+com/truesim/common/math/Vec4Array.get", "+com/truesim/common/math/Vec4Array.set",

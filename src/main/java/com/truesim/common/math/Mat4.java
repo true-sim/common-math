@@ -119,6 +119,19 @@ public record Mat4(
             0, 0, -1, 0);
     }
 
+    /**
+     * Perspective projection with an infinite far plane and reversed depth: {@code near} maps to 1, infinity to 0.
+     * With a floating-point depth buffer this gives the best depth precision (Vulkan, Direct3D, Metal).
+     */
+    public static Mat4 perspectiveInfiniteReversedZ(double fovY, double aspect, double near) {
+        double f = 1 / Maths.tan(0.5 * fovY);
+        return new Mat4(
+            f / aspect, 0, 0, 0,
+            0, f, 0, 0,
+            0, 0, 0, near,
+            0, 0, -1, 0);
+    }
+
     /** Orthographic projection with depth in [-1, 1] (OpenGL). */
     public static Mat4 orthographic(double left, double right, double bottom, double top, double near, double far) {
         return new Mat4(

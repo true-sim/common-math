@@ -35,7 +35,7 @@ class Vec4Test {
         assertThat(Vec4.of(1, 1, 1, 1).length()).isEqualTo(2.0);
         assertThat(a.lengthSquared()).isEqualTo(30.0);
         assertThat(Vec4.ZERO.distance(Vec4.of(1, 1, 1, 1))).isEqualTo(2.0);
-        assertThat(Vec4.of(0, 0, 3, 4).normalize()).isEqualTo(Vec4.of(0, 0, 0.6, 0.8));
+        assertThat(Vec4.of(0, 0, 3, 4).normalize().approxEquals(Vec4.of(0, 0, 0.6, 0.8), 1e-15)).isTrue();
         assertThat(Vec4.ZERO.normalize()).isEqualTo(Vec4.ZERO);
         assertThat(a.interpolate(b, 0.5)).isEqualTo(Vec4.of(1.5, -1, 4.5, -2));
         assertThat(a.min(b)).isEqualTo(Vec4.of(1, -4, 3, -8));

@@ -13,7 +13,7 @@ pluginManagement {
 }
 
 plugins {
-    id("truesim.settings") version "0.2.0"
+    id("truesim.settings") version "0.3.0"
 }
 
 rootProject.name = "common-math"

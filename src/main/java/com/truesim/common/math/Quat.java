@@ -51,7 +51,7 @@ public record Quat(double x, double y, double z, double w) implements Interpolat
         Vec3 t = to.normalize();
         double d = f.dot(t);
         if (d >= 1 - 1e-12) {
-            return IDENTITY;
+            return new Quat(0, 0, 0, 1);
         }
         if (d <= -1 + 1e-12) {
             Vec3 axis = Vec3.UNIT_X.cross(f);
@@ -136,10 +136,11 @@ public record Quat(double x, double y, double z, double w) implements Interpolat
         return x * x + y * y + z * z + w * w;
     }
 
-    /** This quaternion scaled to length 1, or {@link #IDENTITY} if it has length 0. */
+    /** This quaternion scaled to length 1, or the identity if it has length 0. */
     public Quat normalize() {
         double length = length();
-        return length == 0 ? IDENTITY : new Quat(x / length, y / length, z / length, w / length);
+        double inverse = length == 0 ? 0 : 1 / length;
+        return new Quat(x * inverse, y * inverse, z * inverse, length == 0 ? 1 : w * inverse);
     }
 
     // ---------------------------------------------------------------- rotation
@@ -155,6 +156,65 @@ public record Quat(double x, double y, double z, double w) implements Interpolat
             v.z() + w * tz + (x * ty - y * tx));
     }
 
+    /**
+     * The angles for {@link #fromYawPitchRoll}: {@code (yaw, pitch, roll)} in radians. At pitch of +-90 degrees
+     * (gimbal lock) yaw and roll are not separable; roll is then 0.
+     */
+    public Vec3 toYawPitchRoll() {
+        double m12 = 2 * (y * z - w * x);
+        double sinPitch = Maths.clamp(-m12, -1, 1);
+        if (Math.abs(sinPitch) > 1 - 1e-12) {
+            double m00 = 1 - 2 * (y * y + z * z);
+            double m20 = 2 * (x * z - w * y);
+            return new Vec3(Maths.atan2(-m20, m00), Maths.asin(sinPitch), 0);
+        }
+        double m02 = 2 * (x * z + w * y);
+        double m22 = 1 - 2 * (x * x + y * y);
+        double m10 = 2 * (x * y + w * z);
+        double m11 = 1 - 2 * (x * x + z * z);
+        return new Vec3(Maths.atan2(m02, m22), Maths.asin(sinPitch), Maths.atan2(m10, m11));
+    }
+
+    /** Rotates towards {@code target} by at most {@code maxRadians}, arriving at its rotation. */
+    public Quat rotateTowards(Quat target, double maxRadians) {
+        double angle = angleTo(target);
+        return slerp(target, angle <= maxRadians ? 1 : maxRadians / angle);
+    }
+
+    /**
+     * Advances this orientation by a world-space angular velocity (radians per unit of time, axis times speed) over
+     * {@code dt}, as in rigid-body integration.
+     */
+    public Quat integrate(Vec3 angularVelocity, double dt) {
+        double speed = angularVelocity.length();
+        return fromAxisAngle(angularVelocity, speed * dt).mul(this).normalize();
+    }
+
+    /** The part of this rotation around {@code axis} (unit vector), e.g. a wheel's spin or a forearm's roll. */
+    public Quat twist(Vec3 axis) {
+        double d = x * axis.x() + y * axis.y() + z * axis.z();
+        return new Quat(axis.x() * d, axis.y() * d, axis.z() * d, w).normalize(); // identity if there is no twist
+    }
+
+    /** The rest of this rotation after removing the {@link #twist}: {@code this == swing(axis).mul(twist(axis))}. */
+    public Quat swing(Vec3 axis) {
+        return mul(twist(axis).conjugate());
+    }
+
+    /** Logarithm of a unit quaternion: {@code (axis * angle / 2, 0)}. */
+    public Quat log() {
+        double v = Math.sqrt(x * x + y * y + z * z);
+        double s = v == 0 ? 0 : Maths.atan2(v, w) / v;
+        return new Quat(x * s, y * s, z * s, 0);
+    }
+
+    /** Exponential of a pure quaternion (w ignored): the inverse of {@link #log}. */
+    public Quat exp() {
+        double angle = Math.sqrt(x * x + y * y + z * z);
+        double s = angle == 0 ? 0 : Maths.sin(angle) / angle;
+        return new Quat(x * s, y * s, z * s, Maths.cos(angle));
+    }
+
     /** Rotation angle in radians, in [0, pi]. */
     public double angle() {
         return 2 * Maths.atan2(Math.sqrt(x * x + y * y + z * z), Math.abs(w));
@@ -162,11 +222,9 @@ public record Quat(double x, double y, double z, double w) implements Interpolat
 
     /** Rotation axis, or {@link Vec3#UNIT_X} for the identity rotation. */
     public Vec3 axis() {
-        Vec3 axis = new Vec3(x, y, z).normalize();
-        if (axis.lengthSquared() == 0) {
-            return Vec3.UNIT_X;
-        }
-        return w < 0 ? axis.negate() : axis;
+        double v = Math.sqrt(x * x + y * y + z * z);
+        double inverse = v == 0 ? 0 : (w < 0 ? -1 : 1) / v;
+        return new Vec3(v == 0 ? 1 : x * inverse, y * inverse, z * inverse);
     }
 
     /** Angle of the rotation from this orientation to {@code other}, in [0, pi]. */

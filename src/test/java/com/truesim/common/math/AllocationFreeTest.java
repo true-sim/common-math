@@ -73,6 +73,65 @@ class AllocationFreeTest {
     }
 
     @Test
+    void transformsAndQuaternionExtras() {
+        Transform parent = Transform.of(Vec3.of(1, 2, 3), Quat.fromYawPitchRoll(0.1, 0.2, 0.3), Vec3.splat(2));
+        Transform local = Transform.of(Vec3.UNIT_X, Quat.fromAxisAngle(Vec3.UP, 0.5));
+        TransformArray world = TransformArray.onHeap(32);
+        TransformArray locals = TransformArray.onHeap(32);
+        Vec3Array vertices = Vec3Array.onHeap(64);
+        assertAllocationFree(() -> {
+            for (int i = 1; i < world.size(); i++) {
+                world.setProduct(i, world, i - 1, locals, i);
+            }
+            locals.set(0, local); // fresh values go through set, which is free
+            world.transformPoints(5, vertices, 0, 64);
+        }, 5_000, 1_000, 20);
+        assertAllocationFree(() -> {
+            Transform t = parent.mul(local).inverse();
+            Quat q = t.rotation().integrate(Vec3.of(0, 1, 0), 0.016).rotateTowards(Quat.IDENTITY, 0.01);
+            sink += t.transformPoint(Vec3.ONE).x() + q.toYawPitchRoll().y() + q.twist(Vec3.UP).w();
+        }, 5_000, 1_000, 20);
+    }
+
+    @Test
+    void randomAndNoise() {
+        com.truesim.common.math.random.Rng rng = com.truesim.common.math.random.Rng.seeded(1);
+        com.truesim.common.math.random.Noise noise = com.truesim.common.math.random.Noise.seeded(1);
+        assertAllocationFree(() -> {
+            Vec3 p = rng.nextVec3InSphere().add(rng.nextVec3OnSphere());
+            sink += rng.nextGaussian() + rng.nextInt(10) + rng.nextRotation().w()
+                + noise.simplex(p.x(), p.y(), p.z()) + noise.perlin(p.x(), p.y()) + noise.fractal(p.x(), p.z(), 4);
+        });
+    }
+
+    @Test
+    void geometryQueries() {
+        Mat4 viewProjection = Mat4.perspective(1.2, 1.5, 0.1, 500).mul(Mat4.lookAt(Vec3.of(0, 2, 10), Vec3.ZERO, Vec3.UP));
+        com.truesim.common.math.geometry.Frustum frustum = com.truesim.common.math.geometry.Frustum.fromMatrix(viewProjection);
+        Vec3Array centers = Vec3Array.onHeap(256);
+        for (int i = 0; i < centers.size(); i++) {
+            centers.set(i, Vec3.of(i % 16 - 8, 0, i / 16 - 8));
+        }
+        com.truesim.common.math.geometry.Triangle triangle = new com.truesim.common.math.geometry.Triangle(
+            Vec3.ZERO, Vec3.UNIT_X, Vec3.UNIT_Y);
+        assertAllocationFree(() -> {
+            int visible = 0;
+            for (int i = 0; i < centers.size(); i++) {
+                Vec3 c = centers.get(i);
+                if (frustum.intersectsSphere(c, 0.5) && frustum.intersectsAabb(c.sub(0.5, 0.5, 0.5), c.add(0.5, 0.5, 0.5))) {
+                    visible++;
+                }
+            }
+            sink += visible;
+        }, 2_000, 1_000, 20);
+        assertAllocationFree(() -> {
+            com.truesim.common.math.geometry.Ray ray = new com.truesim.common.math.geometry.Ray(Vec3.of(0.2, 0.2, 5), Vec3.FORWARD);
+            sink += triangle.intersect(ray) + new com.truesim.common.math.geometry.Aabb(Vec3.ZERO, Vec3.ONE).intersect(ray)
+                + com.truesim.common.math.geometry.Intersections.rayObb(0.2, 0.2, 5, 0, 0, -1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1);
+        });
+    }
+
+    @Test
     void colorsAndEasing() {
         ColorArray colors = ColorArray.onHeap(64);
         colors.fill(Color.srgb(0x3366FF));

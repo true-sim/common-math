@@ -90,7 +90,8 @@ public record Vec4(double x, double y, double z, double w) implements Linear<Vec
     /** This vector scaled to length 1, or {@link #ZERO} if it has length 0. */
     public Vec4 normalize() {
         double length = length();
-        return length == 0 ? ZERO : new Vec4(x / length, y / length, z / length, w / length);
+        double inverse = length == 0 ? 0 : 1 / length;
+        return new Vec4(x * inverse, y * inverse, z * inverse, w * inverse);
     }
 
     @Override

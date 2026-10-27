@@ -121,16 +121,14 @@ public record Vec3(double x, double y, double z) implements Linear<Vec3> {
     /** This vector scaled to length 1, or {@link #ZERO} if it has length 0. */
     public Vec3 normalize() {
         double length = length();
-        return length == 0 ? ZERO : new Vec3(x / length, y / length, z / length);
+        double inverse = length == 0 ? 0 : 1 / length;
+        return new Vec3(x * inverse, y * inverse, z * inverse);
     }
 
     /** This vector shortened to at most {@code maxLength}. */
     public Vec3 clampLength(double maxLength) {
         double lengthSquared = lengthSquared();
-        if (lengthSquared <= maxLength * maxLength) {
-            return this;
-        }
-        return scale(maxLength / Math.sqrt(lengthSquared));
+        return scale(lengthSquared <= maxLength * maxLength ? 1 : maxLength / Math.sqrt(lengthSquared));
     }
 
     /** Unsigned angle to {@code other} in radians, in [0, pi]. */
@@ -145,10 +143,54 @@ public record Vec3(double x, double y, double z) implements Linear<Vec3> {
         return addScaled(normal, -2 * dot(normal));
     }
 
+    /**
+     * Refraction of this unit direction through a surface with unit {@code normal} (pointing against this direction)
+     * and ratio of refractive indices {@code eta}; {@link #ZERO} on total internal reflection.
+     */
+    public Vec3 refract(Vec3 normal, double eta) {
+        double cosIncident = -dot(normal);
+        double k = 1 - eta * eta * (1 - cosIncident * cosIncident);
+        boolean total = k < 0;
+        double a = total ? 0 : eta;
+        double b = total ? 0 : eta * cosIncident - Math.sqrt(k);
+        return new Vec3(Math.fma(normal.x, b, x * a), Math.fma(normal.y, b, y * a), Math.fma(normal.z, b, z * a));
+    }
+
+    /** Angle to {@code other} in radians, in [-pi, pi]: positive when counter-clockwise looking down {@code axis}. */
+    public double signedAngle(Vec3 other, Vec3 axis) {
+        double angle = angle(other);
+        return cross(other).dot(axis) < 0 ? -angle : angle;
+    }
+
+    /** Some unit vector perpendicular to this one, e.g. to build a basis from a single direction. */
+    public Vec3 anyPerpendicular() {
+        Vec3 n = normalize();
+        double ax = Math.abs(n.x) < 0.9 ? 1 : 0; // cross with +X, or with +Y if this is close to X
+        double ay = 1 - ax;
+        return new Vec3(-n.z * ay, n.z * ax, n.x * ay - n.y * ax).normalize();
+    }
+
+    /** Moves towards {@code target} by at most {@code maxDistance}, arriving exactly. */
+    public Vec3 moveTowards(Vec3 target, double maxDistance) {
+        double dx = target.x - x;
+        double dy = target.y - y;
+        double dz = target.z - z;
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        boolean arrive = distance <= maxDistance;
+        double f = arrive ? 0 : maxDistance / distance;
+        return new Vec3(
+            arrive ? target.x : Math.fma(dx, f, x), arrive ? target.y : Math.fma(dy, f, y), arrive ? target.z : Math.fma(dz, f, z));
+    }
+
+    /** Component-wise floor to integer coordinates, e.g. the grid cell containing this point. */
+    public Vec3i floor() {
+        return new Vec3i((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
+    }
+
     /** Projection onto {@code onto}, which does not need to be normalized. */
     public Vec3 project(Vec3 onto) {
         double lengthSquared = onto.lengthSquared();
-        return lengthSquared == 0 ? ZERO : onto.scale(dot(onto) / lengthSquared);
+        return onto.scale(lengthSquared == 0 ? 0 : dot(onto) / lengthSquared);
     }
 
     /** The part of this vector perpendicular to {@code onto}. */

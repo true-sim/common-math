@@ -44,12 +44,12 @@ Every value also reads and writes single values: `v.write(segment, offset)`,
 `Vec3.read(segment, offset)`, plus `ByteBuffer`, `DoubleBuffer` and float variants. Each type
 publishes its `LAYOUT` (doubles) and `FLOAT_LAYOUT` as a `java.lang.foreign.StructLayout`.
 
-**Matrices in memory.** Reading a whole `Mat4` back out of memory is more than the JIT can
-optimize away, so `Mat4Array.get` allocates in hot code. Use the operations that work directly
-in memory instead:
+**Matrices and transforms in memory.** Reading a whole `Mat4` or `Transform` back out of memory
+is more than the JIT can optimize away, so `Mat4Array.get` and `TransformArray.get` may
+allocate in hot code. Use the operations that work directly in memory instead:
 
 ```java
-locals.set(i, Mat4.trs(t, r, s));                 // set is free
+locals.set(i, Transform.of(position, rotation));  // set is free
 world.setProduct(i, world, parent[i], locals, i); // world[i] = world[parent] * local[i]
 world.transformPoints(i, vertices, first, count); // in place
 ```
@@ -59,7 +59,9 @@ world.transformPoints(i, vertices, first, count); // in place
 The JIT only removes temporary values if it inlines the methods that create them, and its size
 limits stop it for larger operations such as `Mat4.mul`. On first use, the library therefore
 installs a compiler directive (the runtime equivalent of `jcmd Compiler.directives_add`) that
-always inlines its value types. See `JitInlining`. Results are identical with or without it.
+always inlines its value types and never inlines its transcendental functions (they return
+doubles, and inlining them would use up the JIT's budget). See `JitInlining`. Results are
+identical with or without it.
 
 - Disable with `-Dtruesim.math.inline=false`.
 - On JVMs without HotSpot's diagnostic commands it is skipped (some operations then allocate).
@@ -67,6 +69,22 @@ always inlines its value types. See `JitInlining`. Results are identical with or
 
 Allocation is verified by tests (`AllocationFreeTest`), which measure real heap allocation after
 the JIT has compiled the code.
+
+### Writing allocation-free code
+
+Escape analysis has limits per compiled method. In practice:
+
+- **Keep hot loops focused.** A loop that culls 10,000 objects and also composes transforms
+  and integrates rotations can exceed what the JIT optimizes in one method. Split work into
+  separate methods or passes, as you would for cache efficiency anyway.
+- **Use the in-memory operations for matrices and transforms** stored in arrays (above).
+- **Use the raw-doubles layer for bulk queries.** `Intersections` takes plain doubles, so loops
+  over data in arrays or memory never create objects at all, independent of the JIT.
+- **Keep interfaces out of the innermost loops when they pass values.** An `Acceleration` or
+  `Curve` call site that sees several implementations is not inlined, and the values it passes
+  are allocated. Interfaces that return a `double`, like `Easing`, are always fine.
+- **Measure.** Wrap hot paths in `assertAllocationFree` tests; build-logic runs them with
+  synchronous JIT compilation, so they measure the optimizing compiler, not a timing race.
 
 ## Deterministic math
 
@@ -109,6 +127,54 @@ CatmullRom<Vec3> track = CatmullRom.of(points, Parametrization.CENTRIPETAL, true
 ArcLength<Vec3> path = ArcLength.of(track, 1024);
 Vec3 car = path.at(distanceDriven % path.length());
 ```
+
+For tracks and paths: `ArcLength.nearestDistance(point)` gives progress along a curve (e.g. lap
+distance), `RotationMinimizingFrames` give twist-free orientations along a 3D curve for road
+meshes, banking (`Frame.banked`) and camera rails, and `QuatSpline` interpolates smoothly
+through rotation keys (squad).
+
+## Transforms
+
+`Transform` (translation, rotation, scale) and `Transform2D` compose (`parent.mul(local)`),
+invert, interpolate and apply to points and directions; lighter and more precise than `Mat4` for
+scene graphs and rigid bodies. `Quat` also offers `toYawPitchRoll`, `rotateTowards`,
+`integrate(angularVelocity, dt)` for rigid bodies, swing-twist decomposition and `log`/`exp`.
+Integer vectors `Vec2i` and `Vec3i` cover grids and voxels.
+
+## Geometry
+
+`Ray`, `Plane`, `Aabb`, `Obb` (oriented box), `Sphere`, `Triangle`, `Segment`, `Rect` and
+`Frustum`, with containment, closest-point, overlap and ray queries. Ray queries return the hit
+distance, or `Double.POSITIVE_INFINITY` on a miss, so the nearest hit is a plain `min`.
+
+Shapes are in world space. To combine them with moving objects, either move the shape
+(`localBox.transform(objectTransform)`) or move the query into the shape's space
+(`localBox.intersect(ray.transform(objectTransform.inverse()))`).
+
+Every overlap and ray test exists at three levels that compute the same thing:
+
+```java
+sphere.intersects(box);                                          // shapes
+Intersections.sphereAabb(center, radius, min, max);              // vectors
+Intersections.sphereAabb(cx, cy, cz, r, minX, minY, minZ, maxX, maxY, maxZ); // plain doubles
+```
+
+The plain-doubles level never creates objects: use it for bulk work over data in arrays or
+memory (culling, broad phase). Oriented-box overlap is a branch-free separating-axis test.
+
+## Random numbers and noise
+
+`Rng` is a seeded, deterministic generator (xoshiro256++ with SplitMix64 seeding): same seed,
+same sequence on every platform, for replays and lockstep simulation. It samples ints, doubles,
+Gaussians, points in or on circles and spheres, and uniform random rotations; `fork()` gives
+independent streams and `state()`/`fromState` save and restore it. `Noise` provides seeded
+Perlin and simplex noise in 2D and 3D plus fractal sums of octaves.
+
+## Numerics
+
+`Integrator.SEMI_IMPLICIT_EULER`, `VELOCITY_VERLET` and `RK4` advance a `Motion` under any
+`Acceleration`; `Polynomials` solves quadratic and cubic equations (numerically stable);
+`RootFinding` offers bisection and Newton's method.
 
 ## Building
 
