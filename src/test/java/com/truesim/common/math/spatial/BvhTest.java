@@ -177,6 +177,13 @@ class BvhTest {
         assertThat(bvh.nodes().address()).isEqualTo(memory); // same memory
         assertThat(bvh.nodes().byteSize()).isEqualTo((long) Bvh.NODE_BYTES * bvh.nodeCount());
         assertMatchesBruteForce(bvh, boxes, rng);
+
+        // Moving a single object far away stretches its ancestors without hiding behind the larger root box.
+        Aabb outlier = boxes.get(0);
+        Vec3 far = Vec3.of(1_000, 0, 0);
+        boxes.set(0, new Aabb(outlier.min().add(far), outlier.max().add(far)));
+        bvh.refit();
+        assertThat(bvh.degradation()).isGreaterThan(1.5);
     }
 
     @Test
