@@ -258,10 +258,11 @@ format)`: the views work the same. Conversions round to nearest and clamp, deter
 
 ## Building
 
-Uses [build-logic](https://github.com/true-sim/build-logic) from GitHub Packages (see its README
-for credentials). Builds enforce 100% line and branch coverage, platform independence and the
-allocation-free rules. To develop against a local build-logic checkout:
-
 ```bash
-./gradlew build -Ptruesim.build-logic=../build-logic
+./gradlew build
 ```
+
+Uses `../build-logic` automatically when checked out next to this repository (override with
+`-Ptruesim.build-logic=<path>`), or fetches [build-logic](https://github.com/true-sim/build-logic)
+from GitHub Packages (see its README for credentials). Builds enforce 100% line and branch coverage,
+platform independence and the allocation-free rules.
