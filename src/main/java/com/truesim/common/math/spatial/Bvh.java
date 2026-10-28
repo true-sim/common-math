@@ -200,20 +200,17 @@ public final class Bvh {
     }
 
     /**
-     * Expected cost of a query relative to testing the root box: each node's surface area relative to the root,
-     * weighted by one for inner nodes and by the number of primitives for leaves.
+     * Unnormalized surface area heuristic cost: each node's surface area weighted by one for inner nodes and by the
+     * number of primitives for leaves. Not divided by the current root area so one outlier moving far away cannot
+     * shrink the ratio.
      */
     private double sahCost() {
-        if (nodeCount == 0) {
-            return 0;
-        }
         double sum = 0;
         for (int node = 0; node < nodeCount; node++) {
             long o = (long) node * NODE_BYTES;
             sum += area(o) * Math.max(1, nodes.get(INT, o + COUNT));
         }
-        double root = area(0);
-        return root > 0 ? sum / root : 0;
+        return sum;
     }
 
     private double area(long o) {
