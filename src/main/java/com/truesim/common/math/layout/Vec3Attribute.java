@@ -1,5 +1,6 @@
 package com.truesim.common.math.layout;
 
+import com.truesim.common.math.Mat3;
 import com.truesim.common.math.Mat4;
 import com.truesim.common.math.Vec3;
 
@@ -97,6 +98,18 @@ public final class Vec3Attribute extends Attribute {
                 m.m00() * d.x() + m.m01() * d.y() + m.m02() * d.z(),
                 m.m10() * d.x() + m.m11() * d.y() + m.m12() * d.z(),
                 m.m20() * d.x() + m.m21() * d.y() + m.m22() * d.z());
+        }
+    }
+
+    /**
+     * Transforms every element as a surface normal: by the inverse transpose of {@code m}'s upper 3x3
+     * ({@link Mat4#normalMatrix}), then normalized, so normals stay perpendicular to the surface under non-uniform
+     * scale, where {@link #transformDirections} would tilt them.
+     */
+    public void transformNormals(Mat4 m) {
+        Mat3 normals = m.normalMatrix();
+        for (int i = 0; i < size(); i++) {
+            set(i, normals.transform(get(i)).normalize());
         }
     }
 }
