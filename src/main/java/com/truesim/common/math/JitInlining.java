@@ -24,8 +24,11 @@ import javax.management.ObjectName;
  * conversions of {@link com.truesim.common.math.layout.ElementBuffer}, for the same reason. Results are identical
  * either way; only allocation changes.
  *
- * <p>Disable with {@code -Dtruesim.math.inline=false}. On JVMs without HotSpot's diagnostic commands the directive is
- * skipped. The directive matches all methods, so it takes precedence over other compiler directives added before it.
+ * <p>This changes how the whole JVM compiles: the directive applies to every caller (it has to, for the values to be
+ * inlined into them), and it takes precedence over other compiler directives added before it. Disable it with
+ * {@code -Dtruesim.math.inline=false}. On JVMs without HotSpot's diagnostic commands the directive is skipped, and
+ * the reason logged once (logger {@code com.truesim.common.math.JitInlining}, level INFO): everything still works,
+ * with some allocation.
  *
  * <p>HotSpot applies only the most recently added directive, so other libraries must not add their own: they register
  * their patterns with {@link #include}, which installs one directive combining this library's patterns with all
@@ -144,7 +147,10 @@ public final class JitInlining {
                 Files.deleteIfExists(file);
             }
         } catch (Exception | LinkageError e) {
-            return false; // not HotSpot, or management unavailable: everything still works, with some allocation
+            // Not HotSpot, or management unavailable: everything still works, with some allocation.
+            System.getLogger(JitInlining.class.getName()).log(System.Logger.Level.INFO,
+                "Value types may allocate: the JIT inlining directive could not be installed", e);
+            return false;
         }
     }
 }

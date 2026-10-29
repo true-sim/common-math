@@ -336,6 +336,15 @@ class ElementLayoutTest {
             assertThat(position.get(i).z()).isCloseTo(3, within(1e-12));
             assertThat(normal.get(i).y()).isCloseTo(1, within(1e-9));
         }
+        // Non-uniform scale: a normal transformed as a normal stays perpendicular to the surface, unit length.
+        Vec3 n = Vec3.of(1, 1, 0).normalize();
+        Vec3 tangent = Vec3.of(1, -1, 0);
+        Mat4 stretch = Mat4.trs(Vec3.ZERO, Quat.IDENTITY, Vec3.of(2, 1, 1));
+        normal.set(0, n);
+        normal.transformNormals(stretch);
+        Vec3 stretched = stretch.transformDirection(tangent);
+        assertThat(normal.get(0).dot(stretched)).isCloseTo(0, within(1e-3));
+        assertThat(normal.get(0).length()).isCloseTo(1, within(1e-3));
     }
 
     @Test

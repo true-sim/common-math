@@ -235,7 +235,7 @@ Vec3Attribute position = vertices.attribute(POSITION); // typed handle: no names
 Vec3Attribute normal = vertices.attribute(NORMAL);
 position.set(i, p);
 position.transformPoints(model);
-normal.transformDirections(model);
+normal.transformNormals(model);         // inverse transpose, renormalized: right under non-uniform scale
 ```
 
 | Format | Storage |
