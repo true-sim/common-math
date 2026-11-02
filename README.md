@@ -209,6 +209,10 @@ Gaussians, points in or on circles and spheres, and uniform random rotations; `f
 independent streams and `state()`/`fromState` save and restore it. `Noise` provides seeded
 Perlin and simplex noise in 2D and 3D plus fractal sums of octaves.
 
+`Hash` is the stateless alternative: a PCG hash on 32-bit integers (`pcg`, `combine(seed, salt)`,
+`random(seed, salt)` in [0, 1)), simple enough to write alike in a shader, so CPU and GPU draw the
+same values bit for bit. Scene effects seed particles with it and scene audio picks sounds with it.
+
 ## Numerics
 
 `Integrator.SEMI_IMPLICIT_EULER`, `VELOCITY_VERLET` and `RK4` advance a `Motion` under any
