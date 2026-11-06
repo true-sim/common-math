@@ -270,3 +270,7 @@ Uses `../build-logic` automatically when checked out next to this repository (ov
 `-Ptruesim.build-logic=<path>`), or fetches [build-logic](https://github.com/true-sim/build-logic)
 from GitHub Packages (see its README for credentials). Builds enforce 100% line and branch coverage,
 platform independence and the allocation-free rules.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).
