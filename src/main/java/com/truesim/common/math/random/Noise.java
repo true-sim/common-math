@@ -1,8 +1,10 @@
 package com.truesim.common.math.random;
 
+import com.truesim.common.math.Maths;
+
 /**
- * Deterministic gradient noise for procedural content: improved Perlin noise (2D, 3D), simplex noise (2D, 3D) and
- * fractal sums of octaves. Values are roughly in [-1, 1], vary smoothly, and are identical on every platform for
+ * Deterministic noise for procedural content: improved Perlin noise (2D, 3D), simplex noise (2D, 3D), fractal and
+ * ridged sums of octaves, and cellular (Worley) noise in 3D. Values are roughly in [-1, 1], vary smoothly, and are identical on every platform for
  * the same seed. Instances are immutable and thread-safe.
  */
 public final class Noise {
@@ -215,6 +217,73 @@ public final class Noise {
             z *= 2;
         }
         return sum / norm;
+    }
+
+    /**
+     * Ridged multifractal sum of {@code octaves} layers of 3D simplex noise: each layer {@code (1 - |n|)²}, so the
+     * noise's zero crossings become sharp crests, as on eroded rock and mountain ridges. Each octave has twice the
+     * frequency and half the amplitude of the previous one; the result lies in [0, 1].
+     */
+    public double ridged(double x, double y, double z, int octaves) {
+        checkOctaves(octaves);
+        double sum = 0;
+        double amplitude = 1;
+        double norm = 0;
+        for (int i = 0; i < octaves; i++) {
+            double ridge = 1 - Math.abs(simplex(x, y, z));
+            sum += amplitude * ridge * ridge;
+            norm += amplitude;
+            amplitude *= 0.5;
+            x *= 2;
+            y *= 2;
+            z *= 2;
+        }
+        return Maths.clamp01(sum / norm);
+    }
+
+    // ---------------------------------------------------------------- cellular
+
+    /**
+     * 3D cellular (Worley) noise: the distance to the nearest of feature points scattered one per unit cell, in
+     * [0, about 1.5]. Its cells look like cracked mud, pebbles, scales or the facets of broken stone.
+     */
+    public double cellular(double x, double y, double z) {
+        return worley(x, y, z, false);
+    }
+
+    /**
+     * The distance to the second-nearest feature point minus the nearest's ({@code F2 - F1}): 0 on the borders of the
+     * {@link #cellular cells}, rising toward their insides. Thresholded, it draws cracks.
+     */
+    public double cellularEdge(double x, double y, double z) {
+        return worley(x, y, z, true);
+    }
+
+    private double worley(double x, double y, double z, boolean edge) {
+        double fx = Math.floor(x);
+        double fy = Math.floor(y);
+        double fz = Math.floor(z);
+        int xi = (int) fx;
+        int yi = (int) fy;
+        int zi = (int) fz;
+        double f1 = Double.POSITIVE_INFINITY;
+        double f2 = Double.POSITIVE_INFINITY;
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    int h = perm[perm[perm[(xi + dx) & 255] + ((yi + dy) & 255)] + ((zi + dz) & 255)];
+                    double px = fx + dx + (perm[h] + 0.5) / 256 - x;
+                    double py = fy + dy + (perm[h + 1] + 0.5) / 256 - y;
+                    double pz = fz + dz + (perm[h + 2] + 0.5) / 256 - z;
+                    double d = px * px + py * py + pz * pz;
+                    double nearer = Math.min(d, f1);
+                    f2 = Math.min(f2, Math.max(d, f1));
+                    f1 = nearer;
+                }
+            }
+        }
+        double first = Math.sqrt(f1);
+        return edge ? Math.sqrt(f2) - first : first;
     }
 
     private static void checkOctaves(int octaves) {
