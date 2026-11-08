@@ -138,6 +138,10 @@ distance), `RotationMinimizingFrames` give twist-free orientations along a 3D cu
 meshes, banking (`Frame.banked`) and camera rails, and `QuatSpline` interpolates smoothly
 through rotation keys (squad).
 
+`PolylineFrames` does the same for polylines given as plain doubles (parallel transport by double reflection): a
+tangent and a twist-free normal per point, written into arrays, for sweeping tubes along branches, roots and cables
+without allocating.
+
 ## Transforms
 
 `Transform` (translation, rotation, scale) and `Transform2D` compose (`parent.mul(local)`),
@@ -167,6 +171,12 @@ Intersections.sphereAabb(cx, cy, cz, r, minX, minY, minZ, maxX, maxY, maxZ); // 
 
 The plain-doubles level never creates objects: use it for bulk work over data in arrays or
 memory (culling, broad phase). Oriented-box overlap is a branch-free separating-axis test.
+
+`Octahedral` maps directions to the unit square and back, for the whole sphere and the upper hemisphere (+y the
+pole): octahedral impostors keep one view per cell of such a map, and normals and environment directions pack the
+same way. `Meshes` works on indexed triangle meshes in plain arrays: area-weighted smooth `vertexNormals`, `weld`
+(vertices with bit-identical positions joined, to look past UV seams) and `openEdges` (0 when the mesh is closed and
+every edge joins two consistently wound triangles), for generated meshes and their tests.
 
 ## Bounding volume hierarchy
 
@@ -207,7 +217,10 @@ if (bvh.degradation() > 1.5) {
 same sequence on every platform, for replays and lockstep simulation. It samples ints, doubles,
 Gaussians, points in or on circles and spheres, and uniform random rotations; `fork()` gives
 independent streams and `state()`/`fromState` save and restore it. `Noise` provides seeded
-Perlin and simplex noise in 2D and 3D plus fractal sums of octaves.
+Perlin and simplex noise in 2D and 3D plus fractal sums of octaves, ridged sums (`ridged`: sharp crests, as on
+eroded rock) and 3D cellular (Worley) noise (`cellular`, the distance to the nearest feature point, and
+`cellularEdge`, F2 - F1, zero on the cells' borders: cracks, pebbles, facets). `PoissonDisc` samples a rectangle with
+points at least a distance apart (Bridson's algorithm): blue noise for scattering trees, rocks and sample patterns.
 
 `Hash` is the stateless alternative: a PCG hash on 32-bit integers (`pcg`, `combine(seed, salt)`,
 `random(seed, salt)` in [0, 1)), simple enough to write alike in a shader, so CPU and GPU draw the
