@@ -142,6 +142,10 @@ through rotation keys (squad).
 tangent and a twist-free normal per point, written into arrays, for sweeping tubes along branches, roots and cables
 without allocating.
 
+`Polyline2` is a polyline in the plane with its arc length: points and directions by distance along it, values
+interpolated along it, the point nearest another, Chaikin's corner cutting and even resampling: roads, paths and
+rivers on a ground plan.
+
 ## Transforms
 
 `Transform` (translation, rotation, scale) and `Transform2D` compose (`parent.mul(local)`),
@@ -177,6 +181,10 @@ pole): octahedral impostors keep one view per cell of such a map, and normals an
 same way. `Meshes` works on indexed triangle meshes in plain arrays: area-weighted smooth `vertexNormals`, `weld`
 (vertices with bit-identical positions joined, to look past UV seams) and `openEdges` (0 when the mesh is closed and
 every edge joins two consistently wound triangles), for generated meshes and their tests.
+
+`Polygons` is plane geometry on plain doubles, allocating nothing: distances to segments, segments crossing or
+touching, polygons' signed area, convex polygons' containment, depth (signed distance to their edges' lines) and
+overlap by separating axes: parcels, footprints and corridors on a ground plan.
 
 ## Bounding volume hierarchy
 
